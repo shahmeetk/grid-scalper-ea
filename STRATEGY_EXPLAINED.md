@@ -49,7 +49,9 @@ Every time the price ticks (changes), the robot wakes up and runs this checklist
     * "Did I just finish a job 5 minutes ago? If yes, take a break."
 
 4. **The Entry Decision**:
-    * *If we have NO open trades*: "Check the River (MA) and Swimmer (RSI). Is there a signal?" -> **OPEN FIRST TRADE**.
+    * *If we have NO open trades*:
+        * **Start Price Filter**: "If I'm told to wait for a specific price (e.g., $2000), am I there yet?"
+        * **Signal Check**: "Check the River (MA) and Swimmer (RSI). Is there a signal?" -> **OPEN FIRST TRADE**.
     * *If we HAVE open trades*: "Are we winning?"
         * **YES**: "Have we reached our target profit?" -> **CLOSE EVERYTHING (TP)**.
         * **NO**: "Is the price moving against us?" -> **Go to The Grid Logic**.
@@ -91,6 +93,8 @@ We stop looking at individual trades. We look at the **Basket** (the group of al
 | **TakeProfit** | The "Greed" level. | Finding a win takes longer. Lower is usually safer for scalping. |
 | **RSI_Period** | How fast the "Swimmer" reacts. | 14 is standard. Lower (e.g., 7) makes it react faster (more trades, more false signals). |
 | **CooldownSeconds**| The "Coffee Break". | Prevents the bot from getting trapped in the same bad market twice in a row. |
+| **UseStopLoss** | Individual Safety Brake. | If enabled, every trade has a hard exit. Protects from unexpected 'black swan' moves. |
+| **UseStartPrice** | The Level Filter. | EA only starts baskets at your specific "Target" price level. |
 
 ---
 

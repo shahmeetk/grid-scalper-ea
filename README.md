@@ -26,6 +26,9 @@ This Expert Advisor (EA) is a professional Grid Scalping system designed for Gol
   * *Example*: `0.01, 0.01, 0.02, 0.03...` (Smooth progression).
 * **GridDistance**: The "Breathing Room". Distance between orders. 400 points = $4.00 move on Gold.
 * **AddToDistance**: Widens the grid as it gets deeper. Useful for surviving big crashes.
+* **UseStartPrice**: If enabled, the EA will only start the *first* trade of a basket when the price is at or better than the **TargetStartPrice**.
+  * *Buy*: Price must be <= Target.
+  * *Sell*: Price must be >= Target.
 
 ### [3] Profit & Exit
 
@@ -33,6 +36,7 @@ This Expert Advisor (EA) is a professional Grid Scalping system designed for Gol
 * **TakeProfit**: Target in Points.
 * **UseTrailing**: Locks in profit.
   * **ProfitToStartTrail**: Once the basket sees $30 profit, trailing kicks in.
+* **UseStopLoss**: Enables a fixed Stop Loss (in points) for *every* individual position in the grid. If hit, that specific position closes.
 
 ### [4] Entry Filters
 

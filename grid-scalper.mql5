@@ -48,6 +48,8 @@ input int         MaxOrders                  = 12;                   // Max Grid
 input double      GridDistance               = 400;                  // Grid Distance (Points)
 input double      AddToDistance              = 200;                  // Step Increment (Points)
 input int         IncreaseDistAfter          = 3;                    // Increase Distance after Order #
+input bool        UseStartPrice              = false;                // Start at Specific Price?
+input double      TargetStartPrice           = 2000.0;               // Target Execution Price
 
 input group "=== [3] Profit & Exit ==="
 input ENUM_TP_TYPE TP_Type                   = TP_AVERAGE;           // Take Profit Logic
@@ -57,6 +59,8 @@ input double      ProfitToStartTrail         = 30.0;                 // Basket P
 input double      TrailStartPoints           = 500;                  // Trail Start (Points)
 input double      TrailStepPoints            = 100;                  // Trail Step (Points)
 input bool        TrailOnlyLast              = true;                 // Trail Only Last Order?
+input bool        UseStopLoss                = false;                // Enable Fixed Stop Loss?
+input int         FixedStopLoss              = 5000;                 // Stop Loss (Points)
 
 input group "=== [4] Entry Filters (Optional) ==="
 input int         CooldownSeconds            = 300;                  // Cooldown after Basket Close (Sec)
@@ -200,6 +204,16 @@ void ManageDirection(ENUM_POSITION_TYPE type)
              signal = CheckEntrySignal(type);
           }
           
+          // Start Price Override: If enabled, signal is ONLY true if price is at or beyond target
+          if(UseStartPrice && signal) {
+             double current_price = (type == POSITION_TYPE_BUY) ? m_symbol.Ask() : m_symbol.Bid();
+             if(type == POSITION_TYPE_BUY) {
+                if(current_price > TargetStartPrice) signal = false; // Only buy if price is at or below target
+             } else {
+                if(current_price < TargetStartPrice) signal = false; // Only sell if price is at or above target
+             }
+          }
+
           if(signal) OpenFirstTrade(type);
       }
    }
@@ -292,12 +306,19 @@ void OpenFirstTrade(ENUM_POSITION_TYPE type)
 
    tp_price = NormalizeDouble(tp_price, m_symbol.Digits());
 
+   double sl_price = 0;
+   if(UseStopLoss) {
+      if(type == POSITION_TYPE_BUY) sl_price = price - FixedStopLoss * m_symbol.Point();
+      else sl_price = price + FixedStopLoss * m_symbol.Point();
+      sl_price = NormalizeDouble(sl_price, m_symbol.Digits());
+   }
+
    if(type == POSITION_TYPE_BUY) {
       string comment = StringFormat("%s BUY #1 (%.2f)", StrategyTag, lot);
-      m_trade.Buy(lot, Symbol(), price, 0, tp_price, comment);
+      m_trade.Buy(lot, Symbol(), price, sl_price, tp_price, comment);
    } else {
       string comment = StringFormat("%s SELL #1 (%.2f)", StrategyTag, lot);
-      m_trade.Sell(lot, Symbol(), price, 0, tp_price, comment);
+      m_trade.Sell(lot, Symbol(), price, sl_price, tp_price, comment);
    }
 }
 
@@ -339,18 +360,24 @@ void CheckGridExpansion(ENUM_POSITION_TYPE type, int current_count)
       double lot = GetLotSize(current_count);
       double price = (type == POSITION_TYPE_BUY)? m_symbol.Ask() : m_symbol.Bid();
       
-      // Individual TP Logic (Average TP handled separately)
       double tp = 0;
       if(TP_Type == TP_INDIVIDUAL) {
           if(type == POSITION_TYPE_BUY) tp = price + TakeProfit * m_symbol.Point();
           else tp = price - TakeProfit * m_symbol.Point();
       }
+      
+      double sl = 0;
+      if(UseStopLoss) {
+          if(type == POSITION_TYPE_BUY) sl = price - FixedStopLoss * m_symbol.Point();
+          else sl = price + FixedStopLoss * m_symbol.Point();
+          sl = NormalizeDouble(sl, m_symbol.Digits());
+      }
 
       string typeStr = (type == POSITION_TYPE_BUY) ? "BUY" : "SELL";
       string comment = StringFormat("%s %s #%d (%.2f)", StrategyTag, typeStr, current_count + 1, lot);
 
-      if(type == POSITION_TYPE_BUY) m_trade.Buy(lot, Symbol(), price, 0, tp, comment);
-      else m_trade.Sell(lot, Symbol(), price, 0, tp, comment);
+      if(type == POSITION_TYPE_BUY) m_trade.Buy(lot, Symbol(), price, sl, tp, comment);
+      else m_trade.Sell(lot, Symbol(), price, sl, tp, comment);
    }
 }
 
