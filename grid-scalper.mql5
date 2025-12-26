@@ -5,7 +5,7 @@
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2025, Algorithmic Engineer"
 #property link      "https://www.mql5.com"
-#property version   "2.00"
+#property version   "2.01"
 #property strict
 #property description "Advanced Grid Scalper with RSI logic, Dynamic Spacing, and Weighted Averaging"
 
@@ -53,10 +53,12 @@ input group "=== [3] Profit & Exit ==="
 input ENUM_TP_TYPE TP_Type                   = TP_AVERAGE;           // Take Profit Logic
 input double      TakeProfit                 = 1000;                 // Profit Target (Points)
 input bool        UseTrailing                = true;                 // Enable Trailing Stop
-input double      ProfitToStartTrail         = 30.0;                 // Basket Profit ($) to Start Trailing
+input double      ProfitToStartTrail         = 30.0;                 // Basket Profit to Start Trailing ($)
 input double      TrailStartPoints           = 500;                  // Trail Start (Points)
 input double      TrailStepPoints            = 100;                  // Trail Step (Points)
 input bool        TrailOnlyLast              = true;                 // Trail Only Last Order?
+input bool        UseStopLoss                = false;                // Enable Loss Limit?
+input int         FixedStopLoss              = 5000;                 // Loss Limit (Points)
 
 input group "=== [4] Entry Filters (Optional) ==="
 input int         CooldownSeconds            = 300;                  // Cooldown after Basket Close (Sec)
@@ -73,6 +75,14 @@ input double      RSI_Buy_Trend              = 45.0;                 // Buy: Tre
 input double      RSI_Sell_Peak              = 70.0;                 // Sell: Reversal Level (Overbought)
 input double      RSI_Sell_Trend             = 55.0;                 // Sell: Trend Rally Level
 
+input group "=== [6] Range Trading Filters ==="
+input bool        UseBuyRange                = false;                // Enable Buy Price Range?
+input double      BuyStartPrice              = 1900.0;               // Buy: Start Price (Lower Bound)
+input double      BuyStopPrice               = 2100.0;               // Buy: Stop Price (Upper Bound)
+input bool        UseSellRange               = false;                // Enable Sell Price Range?
+input double      SellStartPrice             = 2100.0;               // Sell: Start Price (Upper Bound)
+input double      SellStopPrice              = 1900.0;               // Sell: Stop Price (Lower Bound)
+
 //--- Global Objects
 CTrade         m_trade;
 CSymbolInfo    m_symbol;
@@ -83,7 +93,6 @@ CAccountInfo   m_account;
 double         m_lot_array[];
 int            m_rsi_handle;
 double         m_rsi_buffer[];
-int            m_day_of_year;
 bool           m_dd_breached = false;
 int            m_ma_handle;
 double         m_ma_buffer[];
@@ -128,14 +137,9 @@ int OnInit()
    // 5. Setup Trade Object
    m_trade.SetExpertMagicNumber(MagicNumber);
    m_trade.SetMarginMode();
-   m_trade.SetTypeFillingBySymbol(Symbol());
-   m_trade.SetDeviationInPoints(20); // Slippage tolerance
+   m_trade.SetDeviationInPoints(10); // Price slippage tolerance in points
 
-   // 5. Misc
-   // 5. Misc
-   m_day_of_year = GetDayOfYear(TimeCurrent());
-
-   Print("Grid Scalper Initialized. Magic: ", MagicNumber);
+   PrintFormat("Grid Scalper v2.01 Initialized. Magic: %d", MagicNumber);
    return(INIT_SUCCEEDED);
 }
 
@@ -155,22 +159,14 @@ void OnTick()
 {
    if(!RefreshRates()) return;
 
-   // --- 1. Risk Management Check ---
    CheckEquityProtection();
-   if(m_dd_breached) {
-      // If DD limit reached, we do not open new grids, but we still manage exits/trailing if possible.
-      // Optionally, logic to close worst trade could go here.
-   }
 
-   // --- 2. Manage Existing Grids ---
-   // We check and manage Buys and Sells independently
+   // --- 2. Grid Management ---
    ManageDirection(POSITION_TYPE_BUY);
    ManageDirection(POSITION_TYPE_SELL);
 
-   // --- 3. Trailing Logic ---
+   // --- 3. Protection & Display ---
    if(UseTrailing) ManageTrailing();
-
-   // --- 4. Display Status ---
    DisplayStatus();
 }
 
@@ -200,23 +196,18 @@ void ManageDirection(ENUM_POSITION_TYPE type)
              signal = CheckEntrySignal(type);
           }
           
+          if(signal) {
+             // Range Filter Check
+             if(!IsWithinRange(type, (type == POSITION_TYPE_BUY ? m_symbol.Ask() : m_symbol.Bid()))) signal = false;
+          }
+
           if(signal) OpenFirstTrade(type);
       }
    }
-   // B. If Positions Exist -> Manage Grid & TP
    else {
-      // 1. Check for Grid Expansion
-      if(!m_dd_breached && count < MaxOrders) {
-         CheckGridExpansion(type, count);
-      }
+      if(!m_dd_breached && count < MaxOrders) CheckGridExpansion(type, count);
       
-      // 2. Manage Take Profit Update
-      if(TP_Type == TP_AVERAGE) {
-         UpdateAverageTP(type);
-      } else {
-         // Individual TP is usually set at order open, but we enforce it here if missing
-         // Not strictly necessary if set correctly on open, but good for redundancy.
-      }
+      if(TP_Type == TP_AVERAGE) UpdateAverageTP(type);
    }
 }
 
@@ -279,25 +270,29 @@ void OpenFirstTrade(ENUM_POSITION_TYPE type)
    double lot = GetLotSize(0);
    double price = (type == POSITION_TYPE_BUY)? m_symbol.Ask() : m_symbol.Bid();
    double tp_price = 0;
-   
-   // Calculate Initial TP
-   if(TP_Type == TP_INDIVIDUAL) {
-      if(type == POSITION_TYPE_BUY) tp_price = price + TakeProfit * m_symbol.Point();
-      else tp_price = price - TakeProfit * m_symbol.Point();
-   } 
-   // Note: For TP_AVERAGE, we set 0 initially or a dummy, it gets updated in next tick.
-   // But setting a safety TP is good practice.
-   if(type == POSITION_TYPE_BUY && tp_price == 0) tp_price = price + TakeProfit * m_symbol.Point();
-   if(type == POSITION_TYPE_SELL && tp_price == 0) tp_price = price - TakeProfit * m_symbol.Point();
+      if(TP_Type == TP_INDIVIDUAL) {
+       if(type == POSITION_TYPE_BUY) tp_price = price + TakeProfit * m_symbol.Point();
+       else tp_price = price - TakeProfit * m_symbol.Point();
+    } 
+    
+    if(type == POSITION_TYPE_BUY && tp_price == 0) tp_price = price + TakeProfit * m_symbol.Point();
+    if(type == POSITION_TYPE_SELL && tp_price == 0) tp_price = price - TakeProfit * m_symbol.Point();
 
    tp_price = NormalizeDouble(tp_price, m_symbol.Digits());
 
+   double sl_price = 0;
+   if(UseStopLoss) {
+      if(type == POSITION_TYPE_BUY) sl_price = price - FixedStopLoss * m_symbol.Point();
+      else sl_price = price + FixedStopLoss * m_symbol.Point();
+      sl_price = NormalizeDouble(sl_price, m_symbol.Digits());
+   }
+
    if(type == POSITION_TYPE_BUY) {
       string comment = StringFormat("%s BUY #1 (%.2f)", StrategyTag, lot);
-      m_trade.Buy(lot, Symbol(), price, 0, tp_price, comment);
+      m_trade.Buy(lot, Symbol(), price, sl_price, tp_price, comment);
    } else {
       string comment = StringFormat("%s SELL #1 (%.2f)", StrategyTag, lot);
-      m_trade.Sell(lot, Symbol(), price, 0, tp_price, comment);
+      m_trade.Sell(lot, Symbol(), price, sl_price, tp_price, comment);
    }
 }
 
@@ -336,21 +331,31 @@ void CheckGridExpansion(ENUM_POSITION_TYPE type, int current_count)
    }
    
    if(trigger) {
-      double lot = GetLotSize(current_count);
       double price = (type == POSITION_TYPE_BUY)? m_symbol.Ask() : m_symbol.Bid();
       
-      // Individual TP Logic (Average TP handled separately)
+      // Range Filter Check for Grid Expansion
+      if(!IsWithinRange(type, price)) return;
+
+      double lot = GetLotSize(current_count);
+      
       double tp = 0;
       if(TP_Type == TP_INDIVIDUAL) {
           if(type == POSITION_TYPE_BUY) tp = price + TakeProfit * m_symbol.Point();
           else tp = price - TakeProfit * m_symbol.Point();
       }
+      
+      double sl = 0;
+      if(UseStopLoss) {
+          if(type == POSITION_TYPE_BUY) sl = price - FixedStopLoss * m_symbol.Point();
+          else sl = price + FixedStopLoss * m_symbol.Point();
+          sl = NormalizeDouble(sl, m_symbol.Digits());
+      }
 
       string typeStr = (type == POSITION_TYPE_BUY) ? "BUY" : "SELL";
       string comment = StringFormat("%s %s #%d (%.2f)", StrategyTag, typeStr, current_count + 1, lot);
 
-      if(type == POSITION_TYPE_BUY) m_trade.Buy(lot, Symbol(), price, 0, tp, comment);
-      else m_trade.Sell(lot, Symbol(), price, 0, tp, comment);
+      if(type == POSITION_TYPE_BUY) m_trade.Buy(lot, Symbol(), price, sl, tp, comment);
+      else m_trade.Sell(lot, Symbol(), price, sl, tp, comment);
    }
 }
 
@@ -389,7 +394,7 @@ void UpdateAverageTP(ENUM_POSITION_TYPE type)
             // Only modify if different to save bandwidth
             if(MathAbs(m_position.TakeProfit() - new_tp) > m_symbol.Point()) {
                if(m_trade.PositionModify(m_position.Ticket(), m_position.StopLoss(), new_tp)) {
-                  PrintFormat("TP ADJUSTED: [%s] Ticket #%I64u set to %.2f", (type==POSITION_TYPE_BUY?"BUY":"SELL"), m_position.Ticket(), new_tp);
+                  PrintFormat("Profit Target UPDATED: [%s] Ticket #%I64u set to %.2f", (type==POSITION_TYPE_BUY?"BUY":"SELL"), m_position.Ticket(), new_tp);
                }
             }
          }
@@ -460,29 +465,20 @@ void ApplyTrail(ENUM_POSITION_TYPE type, ulong last_ticket)
 }
 
 //+------------------------------------------------------------------+
-//| New Day Reset |
-//+------------------------------------------------------------------+
-// Removed to simplify logic as per best practices for continuous grid systems.
-// If needed, can be re-added, but for now focusing on core grid logic.
-
-//+------------------------------------------------------------------+
-//| Equity Protection |
+//| Safety Check & Helpers |
 //+------------------------------------------------------------------+
 void CheckEquityProtection()
 {
-   double dd = m_account.Balance() - m_account.Equity();
-   if(dd > MaxDDToHedge) {
-       if(!m_dd_breached) Print("MaxDD Reached! DD: ", dd);
+   double current_dd = m_account.Balance() - m_account.Equity();
+   if(current_dd > MaxDDToHedge) {
+       if(!m_dd_breached) PrintFormat("Max Drawdown Reached! Current DD: %.2f", current_dd);
        
        if(CloseOnMaxDD) {
-          Print("Equity Protection Triggered: Closing ALL positions.");
+          Print("Emergency Protection: Closing ALL Positions.");
           CloseAll();
        }
-       
        m_dd_breached = true;
    } else {
-       // Optional: Reset breached flag if equity recovers? 
-       // Usually better to require manual reset, but here we reset if recovered.
        m_dd_breached = false; 
    }
 }
@@ -503,6 +499,25 @@ int CountPositions(ENUM_POSITION_TYPE type) {
       if(m_position.SelectByIndex(i) && IsMyPosition() && m_position.PositionType() == type) cnt++;
    }
    return cnt;
+}
+
+bool IsWithinRange(ENUM_POSITION_TYPE type, double price)
+{
+   if(type == POSITION_TYPE_BUY && UseBuyRange) {
+      // For Buy: Start is usually lower, Stop is upper.
+      // But we just check if price is between min and max for simplicity
+      double min_p = MathMin(BuyStartPrice, BuyStopPrice);
+      double max_p = MathMax(BuyStartPrice, BuyStopPrice);
+      if(price < min_p || price > max_p) return false;
+   }
+   
+   if(type == POSITION_TYPE_SELL && UseSellRange) {
+      double min_p = MathMin(SellStartPrice, SellStopPrice);
+      double max_p = MathMax(SellStartPrice, SellStopPrice);
+      if(price < min_p || price > max_p) return false;
+   }
+   
+   return true;
 }
 
 void DisplayStatus()
@@ -556,13 +571,6 @@ bool ParseLotString(string str_in, double& result[]) {
    ArrayResize(result, total);
    for(int i=0; i<total; i++) result[i] = StringToDouble(parts[i]);
    return true;
-}
-
-int GetDayOfYear(datetime time)
-{
-   MqlDateTime dt;
-   TimeToStruct(time, dt);
-   return dt.day_of_year;
 }
 
 bool RefreshRates() { return m_symbol.RefreshRates(); }
