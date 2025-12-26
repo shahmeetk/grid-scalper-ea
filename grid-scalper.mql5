@@ -1,6 +1,6 @@
 //+------------------------------------------------------------------+
 //| grid_scalper.mq5 |
-//| Copyright 2025, Algorithmic Engineer |
+//| Copyright 2025,  Algorithmic Engineer |
 //| https://www.mql5.com |
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2025, Algorithmic Engineer"
@@ -33,55 +33,45 @@ enum ENUM_START_MODE {
 };
 
 //--- Input Parameters
-input group "=== Strategy Identity ==="
-input string      GridName                   = "Grid_Scalper_Gold";  // EA Comment/Name
-input long        MagicNumber                = 123456;               // Magic Number
-
-input group "=== Trade Settings ==="
-input ENUM_START_MODE StartMode          = START_IMMEDIATE;      // Entry Mode (Signal/Immediate)
-input ENUM_TRADE_DIR ImmediateDirection  = DIR_BOTH;             // Immediate Start Direction
-input ENUM_TRADE_DIR Trade_Direction     = DIR_BOTH;             // Allowed Directions
-input string      TradeSizeArrayStr          = "0.01,0.01,0.02,0.03,0.05,0.08,0.13,0.21,0.34,0.55,0.89"; // Lot Array (CSV)
-input int         MaxOrders                  = 15;                   // Max Orders per Direction
-input bool        IncludeManualTrade         = false;                // Manage Manual Trades?
-
-input group "=== Grid Management ==="
-input double      GridDistance               = 500;                  // Base Distance (Points)
-input double      AddToDistance              = 200;                  // Extra Distance (Points)
-input int         IncreaseDistanceAfterOrders= 5;                    // Add Distance after N orders
-
-input group "=== Exit & Profit ==="
-input ENUM_TP_TYPE TP_Type                   = TP_AVERAGE;           // Take Profit Mode
-input double      TakeProfit                 = 1000;                 // Take Profit (Points)
-input bool        NewDayOption               = true;                 // Reset on New Day if Profitable
-
-input group "=== Trailing Stop ==="
-input bool        UseTrailing                = true;                 // Enable Trailing
-input double      ProfitInAmountTrailStart   = 25.0;                 // Profit ($) to Start Trailing (Basket)
-input double      StartTrailing              = 600;                  // Start Trailing (Points) - Per Trade
-input double      TrailingStep               = 100;                  // Trailing Step (Points)
-input bool        LastTradeTrailing          = true;                 // Trail Only Last Trade?
-
-input group "=== Entry Signals (RSI) ==="
-input int         RSI_Period                 = 14;                   // RSI Period
-input ENUM_APPLIED_PRICE RSI_Price           = PRICE_CLOSE;          // RSI Price
-input double      RSI_BuyLevel               = 30.0;                 // Buy Level (Reversal)
-input double      RSI_SellLevel              = 70.0;                 // Sell Level (Reversal)
-input double      RSI_Trend_Buy              = 45.0;                 // Buy Level (Trend Dip)
-input double      RSI_Trend_Sell             = 55.0;                 // Sell Level (Trend Rally)
-
-input group "=== Filters & Protection ==="
-input int         CooldownSeconds            = 300;                  // Wait N seconds between baskets
-input bool        ApplyTimeFilter            = false;                // Enable Time Filter
-input string      StartTime                  = "01:05";              // Start Time (Server)
-input string      StopTime                   = "18:00";              // Stop Time (Server)
-input double      MaxDDToHedge               = 2000.0;               // Max Drawdown ($) - Stops Adding
+input group "=== [1] Identity & Risk ==="
+input string      StrategyTag                = "GoldScalper";        // Strategy Name (Comment Tag)
+input long        MagicNumber                = 123456;               // Unique Magic Number
+input double      MaxDDToHedge               = 2000.0;               // Max Drawdown ($) -> Trigger Protection
 input bool        CloseOnMaxDD               = true;                 // Close All if MaxDD Reached?
+input bool        IncludeManualTrade         = false;                // Manage Manual Trades? (Magic 0)
 
-input group "=== Trend Filter ==="
-input bool        UseTrendFilter             = true;                 // Enable MA Trend Filter
+input group "=== [2] Grid Execution ==="
+input ENUM_TRADE_DIR Trade_Direction         = DIR_BOTH;             // Allowed Trade Direction
+input ENUM_START_MODE StartMode              = START_IMMEDIATE;      // Entry Mode (Signal vs Immediate)
+input string      LotSequence                = "0.01,0.01,0.01,0.02,0.02,0.03,0.04,0.06,0.10,0.15,0.25"; // Lot Sequence (Comma Separated)
+input int         MaxOrders                  = 12;                   // Max Grid Orders (Per Side)
+input double      GridDistance               = 400;                  // Grid Distance (Points)
+input double      AddToDistance              = 200;                  // Step Increment (Points)
+input int         IncreaseDistAfter          = 3;                    // Increase Distance after Order #
+
+input group "=== [3] Profit & Exit ==="
+input ENUM_TP_TYPE TP_Type                   = TP_AVERAGE;           // Take Profit Logic
+input double      TakeProfit                 = 1000;                 // Profit Target (Points)
+input bool        UseTrailing                = true;                 // Enable Trailing Stop
+input double      ProfitToStartTrail         = 30.0;                 // Basket Profit ($) to Start Trailing
+input double      TrailStartPoints           = 500;                  // Trail Start (Points)
+input double      TrailStepPoints            = 100;                  // Trail Step (Points)
+input bool        TrailOnlyLast              = true;                 // Trail Only Last Order?
+
+input group "=== [4] Entry Filters (Optional) ==="
+input int         CooldownSeconds            = 300;                  // Cooldown after Basket Close (Sec)
+input bool        ApplyTimeFilter            = false;                // Enable Time Filter
+input string      StartTime                  = "08:00";              // Start Time (Server)
+input string      StopTime                   = "20:00";              // Stop Time (Server)
+
+input group "=== [5] Trend & Signal (If Signal Mode) ==="
+input bool        UseTrendFilter             = true;                 // Enable Trend Filter (MA)
 input int         MA_Period                  = 50;                   // MA Period
-input ENUM_MA_METHOD MA_Method               = MODE_EMA;             // MA Method
+input int         RSI_Period                 = 14;                   // RSI Period
+input double      RSI_Buy_Dip                = 30.0;                 // Buy: Reversal Level (Oversold)
+input double      RSI_Buy_Trend              = 45.0;                 // Buy: Trend Dip Level
+input double      RSI_Sell_Peak              = 70.0;                 // Sell: Reversal Level (Overbought)
+input double      RSI_Sell_Trend             = 55.0;                 // Sell: Trend Rally Level
 
 //--- Global Objects
 CTrade         m_trade;
@@ -112,13 +102,13 @@ int OnInit()
    RefreshRates();
 
    // 2. Parse Lot Array
-   if(!ParseLotString(TradeSizeArrayStr, m_lot_array)) {
-      Print("CRITICAL ERROR: Invalid TradeSizeArray format. Use comma separated numbers (e.g. 0.01,0.02)");
+   if(!ParseLotString(LotSequence, m_lot_array)) {
+      Print("CRITICAL ERROR: Invalid LotSequence format.");
       return(INIT_PARAMETERS_INCORRECT);
    }
 
    // 3. Initialize Indicators
-   m_rsi_handle = iRSI(Symbol(), Period(), RSI_Period, RSI_Price);
+   m_rsi_handle = iRSI(Symbol(), Period(), RSI_Period, PRICE_CLOSE);
    if(m_rsi_handle == INVALID_HANDLE) {
       Print("Failed to create RSI indicator handle");
       return(INIT_FAILED);
@@ -127,7 +117,7 @@ int OnInit()
    
    // 4. Initialize MA
    if(UseTrendFilter) {
-      m_ma_handle = iMA(Symbol(), Period(), MA_Period, 0, MA_Method, PRICE_CLOSE);
+      m_ma_handle = iMA(Symbol(), Period(), MA_Period, 0, MODE_EMA, PRICE_CLOSE);
       if(m_ma_handle == INVALID_HANDLE) {
          Print("Failed to create MA handle");
          return(INIT_FAILED);
@@ -172,16 +162,16 @@ void OnTick()
       // Optionally, logic to close worst trade could go here.
    }
 
-   // --- 2. New Day Reset Logic ---
-   if(NewDayOption) CheckNewDayReset();
-
-   // --- 3. Manage Existing Grids ---
+   // --- 2. Manage Existing Grids ---
    // We check and manage Buys and Sells independently
    ManageDirection(POSITION_TYPE_BUY);
    ManageDirection(POSITION_TYPE_SELL);
 
-   // --- 4. Trailing Logic ---
+   // --- 3. Trailing Logic ---
    if(UseTrailing) ManageTrailing();
+
+   // --- 4. Display Status ---
+   DisplayStatus();
 }
 
 //+------------------------------------------------------------------+
@@ -203,8 +193,8 @@ void ManageDirection(ENUM_POSITION_TYPE type)
           
           if(StartMode == START_IMMEDIATE) {
              // Immediate Mode: Check Direction
-             if(type == POSITION_TYPE_BUY && (ImmediateDirection == DIR_BUY || ImmediateDirection == DIR_BOTH)) signal = true;
-             if(type == POSITION_TYPE_SELL && (ImmediateDirection == DIR_SELL || ImmediateDirection == DIR_BOTH)) signal = true;
+             if(type == POSITION_TYPE_BUY && (Trade_Direction == DIR_BUY || Trade_Direction == DIR_BOTH)) signal = true;
+             if(type == POSITION_TYPE_SELL && (Trade_Direction == DIR_SELL || Trade_Direction == DIR_BOTH)) signal = true;
           } else {
              // Signal Mode
              signal = CheckEntrySignal(type);
@@ -252,11 +242,11 @@ bool CheckEntrySignal(ENUM_POSITION_TYPE type)
       if(type == POSITION_TYPE_BUY) {
          // Zone A: Strong Uptrend (Price > MA) -> Buy Shallow Dips
          if(close > ma) {
-            if(rsi < RSI_Trend_Buy) return true;
+            if(rsi < RSI_Buy_Trend) return true;
          } 
          // Zone B: Below MA -> Only Buy Deep Reversals
          else {
-            if(rsi < RSI_BuyLevel) return true;
+            if(rsi < RSI_Buy_Dip) return true;
          }
          return false; // No Buy Signal
       }
@@ -264,18 +254,18 @@ bool CheckEntrySignal(ENUM_POSITION_TYPE type)
       if(type == POSITION_TYPE_SELL) {
          // Zone A: Strong Downtrend (Price < MA) -> Sell Shallow Rallies
          if(close < ma) {
-            if(rsi > RSI_Trend_Sell) return true;
+            if(rsi > RSI_Sell_Trend) return true;
          }
          // Zone B: Above MA -> Only Sell Deep Reversals
          else {
-             if(rsi > RSI_SellLevel) return true;
+             if(rsi > RSI_Sell_Peak) return true;
          }
          return false; // No Sell Signal
       }
    } else {
       // Standard RSI Logic if Filter OFF
-      if(type == POSITION_TYPE_BUY) return (rsi < RSI_BuyLevel);
-      if(type == POSITION_TYPE_SELL) return (rsi > RSI_SellLevel);
+      if(type == POSITION_TYPE_BUY) return (rsi < RSI_Buy_Dip);
+      if(type == POSITION_TYPE_SELL) return (rsi > RSI_Sell_Peak);
    }
    
    return false;
@@ -303,9 +293,11 @@ void OpenFirstTrade(ENUM_POSITION_TYPE type)
    tp_price = NormalizeDouble(tp_price, m_symbol.Digits());
 
    if(type == POSITION_TYPE_BUY) {
-      m_trade.Buy(lot, Symbol(), price, 0, tp_price, GridName);
+      string comment = StringFormat("%s BUY #1 (%.2f)", StrategyTag, lot);
+      m_trade.Buy(lot, Symbol(), price, 0, tp_price, comment);
    } else {
-      m_trade.Sell(lot, Symbol(), price, 0, tp_price, GridName);
+      string comment = StringFormat("%s SELL #1 (%.2f)", StrategyTag, lot);
+      m_trade.Sell(lot, Symbol(), price, 0, tp_price, comment);
    }
 }
 
@@ -331,7 +323,7 @@ void CheckGridExpansion(ENUM_POSITION_TYPE type, int current_count)
    
    // Calculate Required Distance
    double required_dist = GridDistance;
-   if(current_count >= IncreaseDistanceAfterOrders) {
+   if(current_count >= IncreaseDistAfter) {
       required_dist += AddToDistance;
    }
    
@@ -354,8 +346,11 @@ void CheckGridExpansion(ENUM_POSITION_TYPE type, int current_count)
           else tp = price - TakeProfit * m_symbol.Point();
       }
 
-      if(type == POSITION_TYPE_BUY) m_trade.Buy(lot, Symbol(), price, 0, tp, GridName+"-"+IntegerToString(current_count));
-      else m_trade.Sell(lot, Symbol(), price, 0, tp, GridName+"-"+IntegerToString(current_count));
+      string typeStr = (type == POSITION_TYPE_BUY) ? "BUY" : "SELL";
+      string comment = StringFormat("%s %s #%d (%.2f)", StrategyTag, typeStr, current_count + 1, lot);
+
+      if(type == POSITION_TYPE_BUY) m_trade.Buy(lot, Symbol(), price, 0, tp, comment);
+      else m_trade.Sell(lot, Symbol(), price, 0, tp, comment);
    }
 }
 
@@ -393,7 +388,9 @@ void UpdateAverageTP(ENUM_POSITION_TYPE type)
          if(IsMyPosition() && m_position.PositionType() == type) {
             // Only modify if different to save bandwidth
             if(MathAbs(m_position.TakeProfit() - new_tp) > m_symbol.Point()) {
-               m_trade.PositionModify(m_position.Ticket(), m_position.StopLoss(), new_tp);
+               if(m_trade.PositionModify(m_position.Ticket(), m_position.StopLoss(), new_tp)) {
+                  PrintFormat("TP ADJUSTED: [%s] Ticket #%I64u set to %.2f", (type==POSITION_TYPE_BUY?"BUY":"SELL"), m_position.Ticket(), new_tp);
+               }
             }
          }
       }
@@ -418,7 +415,7 @@ void ManageTrailing()
    // 2. Identify Last Ticket (if LastTradeTrailing enabled)
    ulong last_buy_ticket = 0;
    ulong last_sell_ticket = 0;
-   if(LastTradeTrailing) {
+   if(TrailOnlyLast) {
        last_buy_ticket = GetLastTicket(POSITION_TYPE_BUY);
        last_sell_ticket = GetLastTicket(POSITION_TYPE_SELL);
    }
@@ -426,8 +423,8 @@ void ManageTrailing()
    // 3. Apply Trailing
    // Logic: If Basket Profit > ProfitInAmountTrailStart, apply Points Trailing to valid orders
    
-   if(profit_buy >= ProfitInAmountTrailStart) ApplyTrail(POSITION_TYPE_BUY, last_buy_ticket);
-   if(profit_sell >= ProfitInAmountTrailStart) ApplyTrail(POSITION_TYPE_SELL, last_sell_ticket);
+   if(profit_buy >= ProfitToStartTrail) ApplyTrail(POSITION_TYPE_BUY, last_buy_ticket);
+   if(profit_sell >= ProfitToStartTrail) ApplyTrail(POSITION_TYPE_SELL, last_sell_ticket);
 }
 
 void ApplyTrail(ENUM_POSITION_TYPE type, ulong last_ticket)
@@ -436,20 +433,20 @@ void ApplyTrail(ENUM_POSITION_TYPE type, ulong last_ticket)
     for(int i = PositionsTotal() - 1; i >= 0; i--) {
        if(m_position.SelectByIndex(i) && IsMyPosition() && m_position.PositionType() == type) {
            
-           if(LastTradeTrailing && m_position.Ticket()!= last_ticket) continue;
+           if(TrailOnlyLast && m_position.Ticket()!= last_ticket) continue;
            
            double new_sl = 0;
            double price = (type == POSITION_TYPE_BUY)? m_symbol.Bid() : m_symbol.Ask();
            
            if(type == POSITION_TYPE_BUY) {
                // Price must be above Open + StartTrailing
-               if(price > m_position.PriceOpen() + StartTrailing * point) {
-                   double proposed = price - TrailingStep * point;
+               if(price > m_position.PriceOpen() + TrailStartPoints * point) {
+                   double proposed = price - TrailStepPoints * point;
                    if(proposed > m_position.PriceOpen() && proposed > m_position.StopLoss()) new_sl = proposed;
                }
            } else {
-               if(price < m_position.PriceOpen() - StartTrailing * point) {
-                   double proposed = price + TrailingStep * point;
+               if(price < m_position.PriceOpen() - TrailStartPoints * point) {
+                   double proposed = price + TrailStepPoints * point;
                    if(proposed < m_position.PriceOpen() && (m_position.StopLoss() == 0 || proposed < m_position.StopLoss())) new_sl = proposed;
                }
            }
@@ -465,26 +462,8 @@ void ApplyTrail(ENUM_POSITION_TYPE type, ulong last_ticket)
 //+------------------------------------------------------------------+
 //| New Day Reset |
 //+------------------------------------------------------------------+
-void CheckNewDayReset()
-{
-   int current_day = GetDayOfYear(TimeCurrent());
-   if(current_day!= m_day_of_year) {
-       // Day Changed
-       double net_profit = 0;
-       for(int i = PositionsTotal() - 1; i >= 0; i--) {
-           if(m_position.SelectByIndex(i) && IsMyPosition()) {
-               net_profit += m_position.Profit() + m_position.Swap() + m_position.Commission();
-           }
-       }
-       
-       if(net_profit > 0) {
-           Print("New Day Reset: Net Profit > 0. Closing All.");
-           CloseAll();
-       }
-       
-       m_day_of_year = current_day;
-   }
-}
+// Removed to simplify logic as per best practices for continuous grid systems.
+// If needed, can be re-added, but for now focusing on core grid logic.
 
 //+------------------------------------------------------------------+
 //| Equity Protection |
@@ -524,6 +503,43 @@ int CountPositions(ENUM_POSITION_TYPE type) {
       if(m_position.SelectByIndex(i) && IsMyPosition() && m_position.PositionType() == type) cnt++;
    }
    return cnt;
+}
+
+void DisplayStatus()
+{
+   double pBuy = 0, pSell = 0, vBuy = 0, vSell = 0;
+   int cBuy = 0, cSell = 0;
+   
+   for(int i = PositionsTotal() - 1; i >= 0; i--) {
+      if(m_position.SelectByIndex(i) && IsMyPosition()) {
+         if(m_position.PositionType() == POSITION_TYPE_BUY) {
+            pBuy += m_position.Profit() + m_position.Swap() + m_position.Commission();
+            vBuy += m_position.Volume();
+            cBuy++;
+         } else {
+            pSell += m_position.Profit() + m_position.Swap() + m_position.Commission();
+            vSell += m_position.Volume();
+            cSell++;
+         }
+      }
+   }
+   
+   string text = "--- [ " + StrategyTag + " ] ---\n";
+   text += StringFormat(" Magic: %d | Acc: %d\n", MagicNumber, m_account.Login());
+   text += "---------------------------------\n";
+   text += StringFormat(" BUY:  %d Orders | %.2f Lots\n", cBuy, vBuy);
+   text += StringFormat("       Profit: %.2f\n", pBuy);
+   text += "---------------------------------\n";
+   text += StringFormat(" SELL: %d Orders | %.2f Lots\n", cSell, vSell);
+   text += StringFormat("       Profit: %.2f\n", pSell);
+   text += "---------------------------------\n";
+   text += StringFormat(" TOTAL PROFIT: %.2f\n", pBuy + pSell);
+   text += StringFormat(" TOTAL LOTS:   %.2f\n", vBuy + vSell);
+   
+   if(m_dd_breached) text += " !!! DD PROTECTION ACTIVE !!!\n";
+   text += "---------------------------------";
+   
+   Comment(text);
 }
 
 double GetLotSize(int index) {

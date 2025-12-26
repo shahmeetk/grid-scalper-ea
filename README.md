@@ -1,73 +1,59 @@
 # Grid Scalper Pro - Strategy Guide
 
-This Expert Advisor (EA) is an advanced Grid Scalping strategy designed for Gold (XAUUSD) and Forex pairs. It uses a combination of RSI for entry timing and Moving Averages (MA) for trend filtering. It manages risk through a dynamic grid system, weighted average take profit, and equity protection.
+This Expert Advisor (EA) is a professional Grid Scalping system designed for Gold (XAUUSD). It focuses on "Smart Entry" and "Dynamic Recovery" to consistently profit from market volatility.
 
-## Quick Start Configuration (Gold/XAUUSD)
+## 🚀 Quick Start (Gold/XAUUSD)
 
-| Parameter | Recommended Value | Description |
-| :--- | :--- | :--- |
-| **GridDistance** | `500` | Distance in points between grid orders (500 pts = $5 on Gold). |
-| **MaxOrders** | `12-15` | Maximum number of layers in the grid. |
-| **TakeProfit** | `1000-1500` | Target profit in points. |
-| **TradeSizeArrayStr** | `0.01,0.01,0.02...` | Define your Martingale or linear progression here. |
-| **StartMode** | `START_IMMEDIATELY` | forces the EA to trade immediately without waiting for RSI/MA. |
+1. **Compile the Code**: Open in MetaEditor and press Compile (F7).
+2. **Load Preset**: Use `Gold_Optimized.set` in Strategy Tester.
+3. **Mode Recommendation**: Use `Immediate` mode for constant action, or `Signal` mode for surgical entries.
 
 ---
 
-## Detailed Parameter Explanation
+## 🔧 Parameters Explained
 
-### 1. Strategy Identity
+### [1] Identity & Risk
 
-| Parameter | Type | Example | Description |
-| :--- | :--- | :--- | :--- |
-| **GridName** | `string` | `"Grid_Gold"` | A unique comment for trades to identify this strategy. |
-| **MagicNumber** | `long` | `123456` | Unique ID for the EA. Must be different for every chart/EA. |
+* **StrategyTag**: Your signature. Appears in trade comments (e.g., `GoldScalp B #1`).
+* **MaxDDToHedge**: The Safety Fuse. If Floating Loss > $2000, closes everything to save the account.
 
-### 2. Trade Settings
+### [2] Grid Execution
 
-| Parameter | Type | Example | Description |
-| :--- | :--- | :--- | :--- |
-| **Trade_Direction** | `Drop Down` | `Both Directions` | Allows the EA to trade Buy, Sell, or Both. |
-| **TradeSizeArrayStr** | `string` | `"0.01,0.02..."` | Comma-separated list of lot sizes for each grid step. If steps exceed the list, it repeats the last value. |
-| **MaxOrders** | `int` | `15` | Hard limit on how many positions can be open per direction. |
+* **StartMode**:
+  * `START_IMMEDIATE` (**Recommended**): Ignores RSI/Trend for the *first* trade. Starts working instantly.
+  * `START_SIGNAL`: Waits for specific RSI conditions (slower, safer).
+* **LotSequence**: The DNA of the strategy. Define your risk steps.
+  * *Example*: `0.01, 0.01, 0.02, 0.03...` (Smooth progression).
+* **GridDistance**: The "Breathing Room". Distance between orders. 400 points = $4.00 move on Gold.
+* **AddToDistance**: Widens the grid as it gets deeper. Useful for surviving big crashes.
 
-### 3. Entry Logic (Crucial)
+### [3] Profit & Exit
 
-| Parameter | Type | Example | Description |
-| :--- | :--- | :--- | :--- |
-| **StartMode** | `Drop Down` | `Signal / Immediate` | **Signal**: Waits for RSI+MA setup. **Immediate**: Opens trade instantly if grid is empty. |
-| **ImmediateDir** | `Drop Down` | `Both` | If StartMode is Immediate, which direction to open first. |
-| **RSI_Period** | `int` | `14` | Length of RSI indicator. |
-| **RSI_BuyLevel** | `double` | `30.0` | **Reversal Buy**: Buy if RSI < 30 (Deep dip). |
-| **RSI_SellLevel** | `double` | `70.0` | **Reversal Sell**: Sell if RSI > 70 (Deep rally). |
-| **RSI_Trend_Buy** | `double` | `45.0` | **Trend Buy**: Buy if Price > MA AND RSI < 45 (Shallow dip). |
-| **RSI_Trend_Sell** | `double` | `55.0` | **Trend Sell**: Sell if Price < MA AND RSI > 55 (Shallow rally). |
-| **UseTrendFilter** | `bool` | `true` | Enables the Dual Zone logic above. |
-| **CooldownSeconds**| `int` | `300` | Wait time (seconds) after a basket closes before entering again. |
+* **TP_Type**: `AVG` (Basket Close) is best. It closes all trades when the *net* profit target is hit.
+* **TakeProfit**: Target in Points.
+* **UseTrailing**: Locks in profit.
+  * **ProfitToStartTrail**: Once the basket sees $30 profit, trailing kicks in.
 
-### 4. Grid Management
+### [4] Entry Filters
 
-| Parameter | Type | Example | Description |
-| :--- | :--- | :--- | :--- |
-| **GridDistance** | `double` | `500` (Points) | The minimum gap between grid orders. |
-| **AddToDistance** | `double` | `200` (Points) | Added to `GridDistance` for later orders to widen the grid. |
-| **IncreaseDistAfter**| `int` | `5` | After 5 orders, the grid gap becomes `GridDistance + AddToDistance`. |
-
-### 5. Exit & Risk
-
-| Parameter | Type | Example | Description |
-| :--- | :--- | :--- | :--- |
-| **TP_Type** | `Drop Down` | `Average` | **Average**: Closes all trades at a common price. **Individual**: Each trade has its own TP. |
-| **TakeProfit** | `double` | `1000` | Profit target in points. |
-| **MaxDDToHedge** | `double` | `2000.0` | Max monetary loss allowed before safety triggers. |
-| **CloseOnMaxDD** | `bool` | `true` | If true, CLOSES all trades when MaxDD is reached to save account. |
+* **CooldownSeconds**: "Coffee Break". After a basket closes, the bot waits 5 mins (300s) to avoid buying at the exact top again.
 
 ---
 
-## Troubleshooting "No Trades"
+## 📈 Understanding Trade Comments & HUD
 
-If the EA is not opening trades:
+The EA labels trades clearly to help you track market progression:
 
-1. **Check `StartMode`**: Set it to `START_IMMEDIATELY` to verify the EA is working.
-2. **Check `TimeFilter`**: Ensure `StartTime` and `StopTime` cover the current server time.
-3. **Check `TrendFilter`**: If prices are below the 50 EMA, the EA will NOT Buy (in Signal mode). This is a safety feature. Disable `UseTrendFilter` to trade against the trend.
+* **`GoldScalp BUY #1 (0.01)`**: Initial trade with lot size.
+* **`GoldScalp BUY #2 (0.02)`**: Averaging-down trade.
+* **`Journal Logs`**: Check the 'Journal' tab for "TP ADJUSTED" messages to see basket management in real-time.
+* **`On-Chart HUD`**: The top-left corner shows your active basket profit, total lots, and order counts.
+
+---
+
+## ⚠️ Risk Warning
+
+Grid trading involves risk. While this EA has safety features (`MaxDDToHedge`), always test on Demo first.
+
+* **Recommended Balance**: $5,000+ for 0.01 lots on Gold.
+* **Leverage**: 1:500 recommended.
