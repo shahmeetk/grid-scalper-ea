@@ -33,6 +33,9 @@ enum ENUM_START_MODE {
 };
 
 //--- Input Parameters
+input group "=== [0] License Check ==="
+input string      LicenseKey                 = "";                   // Enter License Key Here
+
 input group "=== [1] Identity & Risk ==="
 input string      StrategyTag                = "GoldScalper";        // Strategy Name (Comment Tag)
 input long        MagicNumber                = 123456;               // Unique Magic Number
@@ -74,7 +77,6 @@ input double      RSI_Buy_Dip                = 30.0;                 // Buy: Rev
 input double      RSI_Buy_Trend              = 45.0;                 // Buy: Trend Dip Level
 input double      RSI_Sell_Peak              = 70.0;                 // Sell: Reversal Level (Overbought)
 input double      RSI_Sell_Trend             = 55.0;                 // Sell: Trend Rally Level
-
 input group "=== [6] Range Trading Filters ==="
 input bool        UseBuyRange                = false;                // Enable Buy Price Range?
 input double      BuyStartPrice              = 1900.0;               // Buy: Start Price (Lower Bound)
@@ -82,6 +84,14 @@ input double      BuyStopPrice               = 2100.0;               // Buy: Sto
 input bool        UseSellRange               = false;                // Enable Sell Price Range?
 input double      SellStartPrice             = 2100.0;               // Sell: Start Price (Upper Bound)
 input double      SellStopPrice              = 1900.0;               // Sell: Stop Price (Lower Bound)
+
+input group "=== [7] Dashboard & UI ==="
+input ENUM_BASE_CORNER DashCorner             = CORNER_LEFT_UPPER;    // Dashboard Corner
+input int         DashX                      = 10;                   // Dashboard X Offset
+input int         DashY                      = 20;                   // Dashboard Y Offset
+input int         DashWidth                  = 220;                  // Dashboard Width
+input int         DashHeight                 = 180;                  // Dashboard Height
+input color       DashColor                  = clrGoldenrod;         // Theme Color
 
 //--- Global Objects
 CTrade         m_trade;
@@ -103,6 +113,13 @@ datetime       m_last_close_time = 0;
 //+------------------------------------------------------------------+
 int OnInit()
 {
+   // 0. Check License
+   if(!CheckLicense()) {
+      Alert("⛔ LICENSE ERROR: Invalid Key for Account ", m_account.Login());
+      Print("To Get a License, Contact Support.");
+      return(INIT_FAILED);
+   }
+
    // 1. Initialize Symbol
    if(!m_symbol.Name(Symbol())) {
       Print("Failed to initialize symbol");
@@ -146,10 +163,14 @@ int OnInit()
 //+------------------------------------------------------------------+
 //| Expert deinitialization function |
 //+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+//| Expert deinitialization function |
+//+------------------------------------------------------------------+
 void OnDeinit(const int reason)
 {
    IndicatorRelease(m_rsi_handle);
    if(UseTrendFilter) IndicatorRelease(m_ma_handle);
+   CleanDashboard();
 }
 
 //+------------------------------------------------------------------+
@@ -167,7 +188,21 @@ void OnTick()
 
    // --- 3. Protection & Display ---
    if(UseTrailing) ManageTrailing();
-   DisplayStatus();
+   if(BarsCalculated(m_rsi_handle) > 0) CopyBuffer(m_rsi_handle, 0, 0, 1, m_rsi_buffer);
+   UpdateDashboard();
+}
+
+//+------------------------------------------------------------------+
+//| Chart Event Handler |
+//+------------------------------------------------------------------+
+void OnChartEvent(const int id, const long &lparam, const double &dparam, const string &sparam)
+{
+   string prefix = "GSP_HUD_";
+   if(id == CHARTEVENT_OBJECT_DRAG) {
+      if(sparam == prefix + "BG") {
+         UpdateDashboard();
+      }
+   }
 }
 
 //+------------------------------------------------------------------+
@@ -465,6 +500,34 @@ void ApplyTrail(ENUM_POSITION_TYPE type, ulong last_ticket)
 }
 
 //+------------------------------------------------------------------+
+//| License Check |
+//+------------------------------------------------------------------+
+
+bool CheckLicense() {
+   // Allow in Strategy Tester
+   if(MQLInfoInteger(MQL_TESTER)) return true;
+   
+   long acc = m_account.Login();
+   if(acc == 0) acc = AccountInfoInteger(ACCOUNT_LOGIN);
+   
+   // Simple Formula: "GSP-" + Account
+   // long secret_math = acc * 59 + 2025;
+   // string expected_key = "GSP-" + IntegerToString(secret_math);
+
+   // 1. Check for Demo Key (Universal)
+   if(AccountInfoInteger(ACCOUNT_TRADE_MODE) == ACCOUNT_TRADE_MODE_DEMO) {
+      if(LicenseKey == "GSP-DEMO") return true; 
+   }
+   
+   // 2. Check for Real Account Key "GSP-Account"
+   string expected_key = "GSP-" + IntegerToString(acc);
+   
+   if(LicenseKey == expected_key) return true;
+   
+   return false;
+}
+
+//+------------------------------------------------------------------+
 //| Safety Check & Helpers |
 //+------------------------------------------------------------------+
 void CheckEquityProtection()
@@ -520,41 +583,105 @@ bool IsWithinRange(ENUM_POSITION_TYPE type, double price)
    return true;
 }
 
-void DisplayStatus()
-{
-   double pBuy = 0, pSell = 0, vBuy = 0, vSell = 0;
-   int cBuy = 0, cSell = 0;
+void UpdateDashboard() {
+   string prefix = "GSP_HUD_";
    
-   for(int i = PositionsTotal() - 1; i >= 0; i--) {
-      if(m_position.SelectByIndex(i) && IsMyPosition()) {
-         if(m_position.PositionType() == POSITION_TYPE_BUY) {
-            pBuy += m_position.Profit() + m_position.Swap() + m_position.Commission();
-            vBuy += m_position.Volume();
-            cBuy++;
-         } else {
-            pSell += m_position.Profit() + m_position.Swap() + m_position.Commission();
-            vSell += m_position.Volume();
-            cSell++;
-         }
-      }
+   // --- Position Logic ---
+   int x_base = DashX;
+   int y_base = DashY;
+   
+   // Auto-detect if user manually moved the BG (if selectable)
+   if(ObjectFind(0, prefix+"BG") >= 0) {
+      x_base = (int)ObjectGetInteger(0, prefix+"BG", OBJPROP_XDISTANCE);
+      y_base = (int)ObjectGetInteger(0, prefix+"BG", OBJPROP_YDISTANCE);
    }
    
-   string text = "--- [ " + StrategyTag + " ] ---\n";
-   text += StringFormat(" Magic: %d | Acc: %d\n", MagicNumber, m_account.Login());
-   text += "---------------------------------\n";
-   text += StringFormat(" BUY:  %d Orders | %.2f Lots\n", cBuy, vBuy);
-   text += StringFormat("       Profit: %.2f\n", pBuy);
-   text += "---------------------------------\n";
-   text += StringFormat(" SELL: %d Orders | %.2f Lots\n", cSell, vSell);
-   text += StringFormat("       Profit: %.2f\n", pSell);
-   text += "---------------------------------\n";
-   text += StringFormat(" TOTAL PROFIT: %.2f\n", pBuy + pSell);
-   text += StringFormat(" TOTAL LOTS:   %.2f\n", vBuy + vSell);
+   int x_label = x_base + 15;
+   int y_row = y_base + 40;
+   int y_step = 25; // More spacing for clarity
    
-   if(m_dd_breached) text += " !!! DD PROTECTION ACTIVE !!!\n";
-   text += "---------------------------------";
+   // Calculate Stats
+   double pBuy = 0, pSell = 0, volBuy = 0, volSell = 0;
+   int cBuy = CountPositions(POSITION_TYPE_BUY);
+   int cSell = CountPositions(POSITION_TYPE_SELL);
    
-   Comment(text);
+   for(int i = PositionsTotal() - 1; i >= 0; i--) {
+       if(m_position.SelectByIndex(i) && IsMyPosition()) {
+           double profit = m_position.Profit() + m_position.Swap() + m_position.Commission();
+           if(m_position.PositionType()==POSITION_TYPE_BUY) { pBuy += profit; volBuy += m_position.Volume(); }
+           else { pSell += profit; volSell += m_position.Volume(); }
+       }
+   }
+   
+   double total_profit = pBuy + pSell;
+   double equity = m_account.Equity();
+   double balance = m_account.Balance();
+   double dd_val = balance - equity;
+   double dd_pct = (balance > 0) ? (dd_val / balance * 100.0) : 0;
+
+   // --- Background Window ---
+   CreateRectLabel(prefix+"BG", x_base, y_base, DashWidth, DashHeight, C'20,20,20', DashColor, 200);
+
+   // --- Title (Centered relative to width) ---
+   CreateLabel(prefix+"Title", "GRID SCALPER PRO", x_base + (DashWidth/2), y_base + 12, DashColor, 12, true, ANCHOR_UPPER);
+   
+   // --- Stats Rows ---
+   CreateLabel(prefix+"Acc", StringFormat("Account: %d (%s)", m_account.Login(), (AccountInfoInteger(ACCOUNT_TRADE_MODE)==ACCOUNT_TRADE_MODE_DEMO?"DEMO":"LIVE")), x_label, y_row, clrLightGray, 9);
+   y_row += y_step;
+   
+   CreateLabel(prefix+"Equity", StringFormat("Equity: $%.2f", equity), x_label, y_row, clrWhite, 10);
+   y_row += y_step;
+
+   CreateLabel(prefix+"DD", StringFormat("Drawdown: $%.2f (%.1f%%)", dd_val, dd_pct), x_label, y_row, (dd_pct > 3 ? clrOrange : clrWhite), 10);
+   y_row += y_step;
+
+   CreateLabel(prefix+"Prof", StringFormat("Net Profit: $%.2f", total_profit), x_label, y_row, (total_profit >= 0 ? clrLime : clrRed), 11, true);
+   y_row += y_step + 5;
+
+   // --- Divider ---
+   CreateLabel(prefix+"Line", "______________________________", x_label, y_row - 15, clrDimGray, 7);
+   
+   CreateLabel(prefix+"Stats", StringFormat("BUY: %d (%.2f)  |  SELL: %d (%.2f)", cBuy, volBuy, cSell, volSell), x_label, y_row, clrSkyBlue, 9);
+   y_row += y_step;
+
+   if(m_dd_breached) {
+      CreateLabel(prefix+"Warn", "⚠️ PROTECTION ACTIVE", x_base + (DashWidth/2), y_row, clrRed, 10, true, ANCHOR_UPPER);
+   }
+
+   ChartRedraw();
+}
+
+void CreateLabel(string name, string text, int x, int y, color c, int size=9, bool bold=false, ENUM_ANCHOR_POINT anchor=ANCHOR_LEFT_UPPER) {
+    if(ObjectFind(0, name) < 0) ObjectCreate(0, name, OBJ_LABEL, 0, 0, 0);
+    ObjectSetString(0, name, OBJPROP_TEXT, text);
+    ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
+    ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
+    ObjectSetInteger(0, name, OBJPROP_COLOR, c);
+    ObjectSetInteger(0, name, OBJPROP_FONTSIZE, size);
+    ObjectSetString(0, name, OBJPROP_FONT, bold ? "Trebuchet MS" : "Arial");
+    ObjectSetInteger(0, name, OBJPROP_CORNER, DashCorner);
+    ObjectSetInteger(0, name, OBJPROP_ANCHOR, anchor);
+    ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
+}
+
+void CreateRectLabel(string name, int x, int y, int w, int h, color bg, color border, int opacity) {
+    if(ObjectFind(0, name) < 0) ObjectCreate(0, name, OBJ_RECTANGLE_LABEL, 0, 0, 0);
+    ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
+    ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
+    ObjectSetInteger(0, name, OBJPROP_XSIZE, w);
+    ObjectSetInteger(0, name, OBJPROP_YSIZE, h);
+    ObjectSetInteger(0, name, OBJPROP_BGCOLOR, bg);
+    ObjectSetInteger(0, name, OBJPROP_COLOR, border);
+    ObjectSetInteger(0, name, OBJPROP_BORDER_TYPE, BORDER_FLAT);
+    ObjectSetInteger(0, name, OBJPROP_CORNER, DashCorner);
+    ObjectSetInteger(0, name, OBJPROP_SELECTABLE, true);
+    ObjectSetInteger(0, name, OBJPROP_BACK, false);
+}
+
+
+void CleanDashboard() {
+    ObjectsDeleteAll(0, "GSP_HUD_");
+    Comment("");
 }
 
 double GetLotSize(int index) {
