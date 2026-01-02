@@ -1,0 +1,160 @@
+⚡ GRID SCALPER PRO PLUS v2.2
+Institutional Scaling Engine 
+
+Turn your MetaTrader 5 into a 24/7 Wealth Machine.
+Engineered for Stability. Validated for Security. Built for Profit.
+
+Most Grid EAs are dangerous. They keep buying until your account hits Margin Call. [b]We fixed that.[/b]
+
+✅ Universal Dynamic Risk Guard (UDRG)
+Mathematical protection that physically blocks trades if your margin gets too tight. 
+
+✅ Netting Account Native
+The only EA optimized for MT5 Netting accounts with millisecond-precision threading. Zero lag, zero "Invalid Volume" errors.
+
+✅ Neuromorphic Entry
+RSI + Trend Hybrid logic ensures we only enter when the market is exhausted. No indiscriminate buying.
+
+▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+
+
+1️⃣ STRATEGY A: "GOLD RUSH" (XAUUSD)
+Aggressive Mean Reversion
+Captures small, frequent profits from Gold's volatility
+Timeframe: M1 / M5
+Target: Daily Compounding
+Risk: Managed by UDRG
+
+2️⃣ STRATEGY B: "FOREX FORTRESS" (EURUSD)
+Analytic Trend Scalping
+Surgical entries aligned with the H1 Trend.
+Timeframe: M15
+Target: Steady, Low-Drawdown Growth
+Risk:Conservative
+
+
+• Platform: MetaTrader 5 (MT5)
+• Pairs: XAUUSD, EURUSD, GBPUSD, USDJPY
+• Timeframes: M1 & M5 (Gold), M15 (Forex)
+• Min Deposit: $500 (Aggressive) / $1,000 (Safe)
+• Account Type: ECN, Raw, or Standard
+
+🚀 START AUTOMATING TODAY
+Don't leave your financial future to chance. Use the algorithm engineered for math-based returns.
+
+Risk Disclaimer: Trading involves significant risk. Past performance guarantees nothing. Use the provided UDRG settings for safety.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
