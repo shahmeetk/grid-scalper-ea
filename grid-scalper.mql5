@@ -5,7 +5,7 @@
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2025, Algorithmic Engineer"
 #property link      "https://www.mql5.com"
-#property version   "2.2.0"
+#property version   "2.20"
 #property strict
 #property description "Advanced Grid Scalper with RSI logic, Dynamic Spacing, and Weighted Averaging"
 
@@ -40,7 +40,7 @@ input group "=== [1] Identity & Risk ==="
 input string      StrategyTag                = "GoldScalper";        // Strategy Name (Comment Tag)
 input long        MagicNumber                = 123456;               // Unique Magic Number
 input double      MaxDDToHedge               = 2000.0;               // Max Drawdown ($) -> Trigger Protection
-input bool        CloseOnMaxDD               = true;                 // Close All if MaxDD Reached?
+input bool        CloseOnMaxDD               = false;                // Close All if MaxDD Reached?
 input bool        IncludeManualTrade         = false;                // Manage Manual Trades? (Magic 0)
 
 input group "=== [2] Grid Execution ==="
@@ -55,7 +55,7 @@ input int         IncreaseDistAfter          = 3;                    // Increase
 input group "=== [3] Profit & Exit ==="
 input ENUM_TP_TYPE TP_Type                   = TP_AVERAGE;           // Take Profit Logic
 input double      TakeProfit                 = 1000;                 // Profit Target (Points)
-input bool        UseTrailing                = true;                 // Enable Trailing Stop
+input bool        UseTrailing                = false;                // Enable Trailing Stop
 input double      ProfitToStartTrail         = 30.0;                 // Basket Profit to Start Trailing ($)
 input double      TrailStartPoints           = 500;                  // Trail Start (Points)
 input double      TrailStepPoints            = 100;                  // Trail Step (Points)
@@ -70,7 +70,7 @@ input string      StartTime                  = "08:00";              // Start Ti
 input string      StopTime                   = "20:00";              // Stop Time (Server)
 
 input group "=== [5] Trend & Signal (If Signal Mode) ==="
-input bool        UseTrendFilter             = true;                 // Enable Trend Filter (MA)
+input bool        UseTrendFilter             = false;                // Enable Trend Filter (MA)
 input int         MA_Period                  = 50;                   // MA Period
 input int         RSI_Period                 = 14;                   // RSI Period
 input double      RSI_Buy_Dip                = 30.0;                 // Buy: Reversal Level (Oversold)
@@ -92,6 +92,8 @@ input int         DashY                      = 20;                   // Dashboar
 input int         DashWidth                  = 220;                  // Dashboard Width
 input int         DashHeight                 = 180;                  // Dashboard Height
 input color       DashColor                  = clrGoldenrod;         // Theme Color
+input bool        AutoTheme                  = true;                 // Auto-detect Light/Dark Theme?
+input bool        ShowDashboard              = true;                 // Show/Hide Dashboard
 
 //--- Global Objects
 CTrade         m_trade;
@@ -107,6 +109,8 @@ bool           m_dd_breached = false;
 int            m_ma_handle;
 double         m_ma_buffer[];
 datetime       m_last_close_time = 0;
+int            g_dash_x = -1;  // Global storage to prevent resetting on deletion
+int            g_dash_y = -1;
 
 //+------------------------------------------------------------------+
 //| Expert initialization function |
@@ -156,13 +160,12 @@ int OnInit()
    m_trade.SetMarginMode();
    m_trade.SetDeviationInPoints(10); // Price slippage tolerance in points
 
-   PrintFormat("Grid Scalper v2.01 Initialized. Magic: %d", MagicNumber);
-   return(INIT_SUCCEEDED);
+    PrintFormat("Grid Scalper v%.2f Initialized. Magic: %d", 2.20, MagicNumber);
+    UpdateDashboard();
+    ChartRedraw();
+    return(INIT_SUCCEEDED);
 }
 
-//+------------------------------------------------------------------+
-//| Expert deinitialization function |
-//+------------------------------------------------------------------+
 //+------------------------------------------------------------------+
 //| Expert deinitialization function |
 //+------------------------------------------------------------------+
@@ -584,21 +587,28 @@ bool IsWithinRange(ENUM_POSITION_TYPE type, double price)
 }
 
 void UpdateDashboard() {
+   if(!ShowDashboard) {
+      CleanDashboard();
+      return;
+   }
+
    string prefix = "GSP_HUD_";
    
    // --- Position Logic ---
-   int x_base = DashX;
-   int y_base = DashY;
+   // Check/Init Globals
+   if(g_dash_x == -1) { g_dash_x = DashX; g_dash_y = DashY; }
    
-   // Auto-detect if user manually moved the BG (if selectable)
+   // Check current position of BG (if user moved it)
    if(ObjectFind(0, prefix+"BG") >= 0) {
-      x_base = (int)ObjectGetInteger(0, prefix+"BG", OBJPROP_XDISTANCE);
-      y_base = (int)ObjectGetInteger(0, prefix+"BG", OBJPROP_YDISTANCE);
+      g_dash_x = (int)ObjectGetInteger(0, prefix+"BG", OBJPROP_XDISTANCE);
+      g_dash_y = (int)ObjectGetInteger(0, prefix+"BG", OBJPROP_YDISTANCE);
    }
-   
-   int x_label = x_base + 15;
-   int y_row = y_base + 40;
-   int y_step = 25; // More spacing for clarity
+
+   int x_base = g_dash_x;
+   int y_base = g_dash_y;
+   int x_label = x_base + 12;      
+   int y_row = y_base + 45;        
+   int y_step = 26;                // Standardized equal spacing
    
    // Calculate Stats
    double pBuy = 0, pSell = 0, volBuy = 0, volSell = 0;
@@ -616,66 +626,95 @@ void UpdateDashboard() {
    double total_profit = pBuy + pSell;
    double equity = m_account.Equity();
    double balance = m_account.Balance();
-   double dd_val = balance - equity;
+   double dd_val = (balance > equity) ? (balance - equity) : 0;
    double dd_pct = (balance > 0) ? (dd_val / balance * 100.0) : 0;
 
-   // --- Background Window ---
-   CreateRectLabel(prefix+"BG", x_base, y_base, DashWidth, DashHeight, C'20,20,20', DashColor, 200);
-
-   // --- Title (Centered relative to width) ---
-   CreateLabel(prefix+"Title", "GRID SCALPER PRO", x_base + (DashWidth/2), y_base + 12, DashColor, 12, true, ANCHOR_UPPER);
+   // --- Theme Logic ---
+   color bg_color = C'15,15,15';    // Deeper matte black
+   color hdr_color = C'30,30,30';   // Header bar
+   color text_main = clrWhite;
+   color text_dim = clrSilver;
    
-   // --- Stats Rows ---
-   CreateLabel(prefix+"Acc", StringFormat("Account: %d (%s)", m_account.Login(), (AccountInfoInteger(ACCOUNT_TRADE_MODE)==ACCOUNT_TRADE_MODE_DEMO?"DEMO":"LIVE")), x_label, y_row, clrLightGray, 9);
+   if(AutoTheme) {
+      color chart_bg = (color)ChartGetInteger(0, CHART_COLOR_BACKGROUND);
+      if(chart_bg == clrWhite || chart_bg == clrLightGray || chart_bg == clrSilver) {
+         bg_color = C'245,245,245';
+         hdr_color = C'220,220,220';
+         text_main = clrBlack;
+         text_dim = clrDarkGray;
+      }
+   }
+
+   // --- Main Windows ---
+   CreateRectLabel(prefix+"BG", x_base, y_base, DashWidth, DashHeight, bg_color, DashColor, 200);
+   CreateRectLabel(prefix+"HDR", x_base, y_base, DashWidth, 32, hdr_color, DashColor, 255); 
+
+   // --- Financial Monitoring Header ---
+   string tag_upper = StrategyTag;
+   StringToUpper(tag_upper);
+   string title_text = StringFormat("%s SCALPER", tag_upper);
+   CreateLabel(prefix+"Title", title_text, x_base + 10, y_base + 8, DashColor, 9, true); 
+   
+   // --- Data Rows ---
+   string login_str = (m_account.Login() > 0) ? IntegerToString(m_account.Login()) : IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN));
+   CreateLabel(prefix+"Acc", StringFormat("TERMINAL ID: %s (%s)", login_str, (AccountInfoInteger(ACCOUNT_TRADE_MODE)==ACCOUNT_TRADE_MODE_DEMO?"DEMO":"LIVE")), x_label, y_row, text_dim, 9);
    y_row += y_step;
    
-   CreateLabel(prefix+"Equity", StringFormat("Equity: $%.2f", equity), x_label, y_row, clrWhite, 10);
+   CreateLabel(prefix+"Equity", StringFormat("EQUITY: $%.2f", equity), x_label, y_row, text_main, 9);
    y_row += y_step;
 
-   CreateLabel(prefix+"DD", StringFormat("Drawdown: $%.2f (%.1f%%)", dd_val, dd_pct), x_label, y_row, (dd_pct > 3 ? clrOrange : clrWhite), 10);
+   CreateLabel(prefix+"DD", StringFormat("DRAWDOWN: $%.2f (%0.2f%%)", dd_val, dd_pct), x_label, y_row, (dd_pct > 3 ? clrOrange : text_main), 9);
    y_row += y_step;
 
-   CreateLabel(prefix+"Prof", StringFormat("Net Profit: $%.2f", total_profit), x_label, y_row, (total_profit >= 0 ? clrLime : clrRed), 11, true);
-   y_row += y_step + 5;
+   CreateLabel(prefix+"Prof", StringFormat("NET PROFIT: $%.2f", total_profit), x_label, y_row, (total_profit >= 0 ? clrLime : clrRed), 9, true);
+   y_row += y_step;
 
-   // --- Divider ---
-   CreateLabel(prefix+"Line", "______________________________", x_label, y_row - 15, clrDimGray, 7);
+   // --- Lower Stats Bar ---
+   CreateRectLabel(prefix+"FTR", x_label-2, y_row - 4, DashWidth-20, 1, text_dim, text_dim, 100); 
+   y_row += 12; // Small padding before stats
    
-   CreateLabel(prefix+"Stats", StringFormat("BUY: %d (%.2f)  |  SELL: %d (%.2f)", cBuy, volBuy, cSell, volSell), x_label, y_row, clrSkyBlue, 9);
+   CreateLabel(prefix+"Stats", StringFormat("BUY: %d (%.2fL) | SELL: %d (%.2fL)", cBuy, volBuy, cSell, volSell), x_label, y_row, (AutoTheme && text_main == clrBlack ? clrBlue : clrSkyBlue), 9);
    y_row += y_step;
 
    if(m_dd_breached) {
-      CreateLabel(prefix+"Warn", "⚠️ PROTECTION ACTIVE", x_base + (DashWidth/2), y_row, clrRed, 10, true, ANCHOR_UPPER);
+      CreateLabel(prefix+"Warn", "CRITICAL PROTECTION ACTIVE", x_base + (DashWidth/2), y_base + DashHeight - 15, clrRed, 9, true, ANCHOR_LOWER);
    }
 
    ChartRedraw();
 }
 
 void CreateLabel(string name, string text, int x, int y, color c, int size=9, bool bold=false, ENUM_ANCHOR_POINT anchor=ANCHOR_LEFT_UPPER) {
-    if(ObjectFind(0, name) < 0) ObjectCreate(0, name, OBJ_LABEL, 0, 0, 0);
+    if(ObjectFind(0, name) < 0) {
+        ObjectCreate(0, name, OBJ_LABEL, 0, 0, 0);
+        ObjectSetInteger(0, name, OBJPROP_CORNER, DashCorner);
+        ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
+        ObjectSetInteger(0, name, OBJPROP_BACK, false);
+    }
+    // Always update these properties
     ObjectSetString(0, name, OBJPROP_TEXT, text);
     ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
     ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
     ObjectSetInteger(0, name, OBJPROP_COLOR, c);
     ObjectSetInteger(0, name, OBJPROP_FONTSIZE, size);
-    ObjectSetString(0, name, OBJPROP_FONT, bold ? "Trebuchet MS" : "Arial");
-    ObjectSetInteger(0, name, OBJPROP_CORNER, DashCorner);
+    ObjectSetString(0, name, OBJPROP_FONT, bold ? "Verdana Bold" : "Verdana");
     ObjectSetInteger(0, name, OBJPROP_ANCHOR, anchor);
-    ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
 }
 
 void CreateRectLabel(string name, int x, int y, int w, int h, color bg, color border, int opacity) {
-    if(ObjectFind(0, name) < 0) ObjectCreate(0, name, OBJ_RECTANGLE_LABEL, 0, 0, 0);
+    if(ObjectFind(0, name) < 0) {
+        ObjectCreate(0, name, OBJ_RECTANGLE_LABEL, 0, 0, 0);
+        ObjectSetInteger(0, name, OBJPROP_CORNER, DashCorner);
+        ObjectSetInteger(0, name, OBJPROP_BORDER_TYPE, BORDER_FLAT);
+        ObjectSetInteger(0, name, OBJPROP_SELECTABLE, (name == "GSP_HUD_BG"));
+        ObjectSetInteger(0, name, OBJPROP_BACK, false);
+    }
+    // Always update visual properties for moving/resizing
     ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
     ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
     ObjectSetInteger(0, name, OBJPROP_XSIZE, w);
     ObjectSetInteger(0, name, OBJPROP_YSIZE, h);
     ObjectSetInteger(0, name, OBJPROP_BGCOLOR, bg);
     ObjectSetInteger(0, name, OBJPROP_COLOR, border);
-    ObjectSetInteger(0, name, OBJPROP_BORDER_TYPE, BORDER_FLAT);
-    ObjectSetInteger(0, name, OBJPROP_CORNER, DashCorner);
-    ObjectSetInteger(0, name, OBJPROP_SELECTABLE, true);
-    ObjectSetInteger(0, name, OBJPROP_BACK, false);
 }
 
 
