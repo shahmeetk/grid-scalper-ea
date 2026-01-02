@@ -58,7 +58,71 @@ The dashboard is designed for professional financial monitoring:
     2. Check `Times`. Is the market open?
     3. Check `Spread`. Some brokers have high spreads that prevent scalping.
 
-# Grid Scalper Pro - Strategy Deep Dive
+---
+
+# 🔧 Parameters Explained
+
+Detailed breakdown of all configurable settings for **Grid Scalper Pro**.
+
+### [1] Identity & Risk
+
+| Parameter | Recommended/Example | Description |
+| :--- | :--- | :--- |
+| **StrategyTag** | `"GoldScalper"` | Prefix for trade comments. |
+| **MagicNumber** | `123456` | Unique bot identifier. |
+| **MaxDDToHedge** | `2000.0` | Max $ loss before safety. |
+| **CloseOnMaxDD** | `true` | Close all on MaxDD. |
+| **IncludeManualTrade**| `false` | Manage Magic 0 trades. |
+
+### [2] Grid Execution
+
+| Parameter | Recommended/Example | Description |
+| :--- | :--- | :--- |
+| **Trade_Direction** | `Both / Buy / Sell`| Allowed trading sides. |
+| **StartMode** | `Immediate / Signal` | Entry trigger type. |
+| **LotSequence** | `"0.01,0.01,0.02..."`| Custom lot scaling. |
+| **MaxOrders** | `12` | Max positions per side. |
+| **GridDistance** | `400` | Points between initial orders. |
+| **AddToDistance** | `200` | Dynamic spacing increase. |
+
+### [3] Profit & Exit
+
+| Parameter | Recommended/Example | Description |
+| :--- | :--- | :--- |
+| **TakeProfit** | `1000` | Points profit target. |
+| **TP_Type** | `Average / Individual`| Exit logic type. |
+| **UseTrailing** | `false` | Enable trailing stop. |
+| **FixedStopLoss** | `5000` | Hard stop per position. |
+
+### [4] Validation & Safety (Guardrails)
+
+| Parameter | Recommended/Example | Description |
+| :--- | :--- | :--- |
+| **UseAutoRisk** | `false` | Enable equity-based clamping. |
+| **RiskPercent** | `0.5` | Max Equity % per trade margin. |
+| **UseMarginBuffer** | `false` | Require 1.5x free margin. |
+| **UseLowMarginStop** | `true` | Stop grid if Margin Level low. |
+| **LowMarginLevelStop**| `500.0` | Margin Level % threshold. |
+| **UseNettingThrottle**| `true` | 2s delay for Netting accounts. |
+
+### [5] Entry Filters
+
+| Parameter | Recommended/Example | Description |
+| :--- | :--- | :--- |
+| **CooldownSeconds**| `300` | Rest after basket close. |
+| **ApplyTimeFilter** | `true` | Use daily trading window. |
+| **RSI_Period** | `14` | RSI calculation period. |
+| **UseTrendFilter** | `true` | Filter with 50-period MA. |
+
+### [6] Theme & Licensing
+
+| Parameter | Recommended/Example | Description |
+| :--- | :--- | :--- |
+| **LicenseKey** | `"GSP-DEMO"` | Active License/Demo key. |
+| **ShowDashboard** | `true` | Display UI panel. |
+| **DashColor** | `clrGold` | Primary UI color. |
+
+---
 
 ## 🎯 Core Trading Philosophy
 
@@ -438,219 +502,5 @@ IF UseBuyRange == true:
 
 **This strategy has been refined over 10+ years managing real capital. It's not a "get rich quick" scheme—it's a professional tool for consistent, risk-managed returns.**
 
-# Grid Scalper Pro - Version History
-
-## v2.20 (2026-01-02) - MQL5 Market Release
-
-### 🚀 Major Changes
-
-* **Market Compliance:** Removed custom licensing system for MQL5 Market DRM compatibility
-* **Cross-Platform Stability:** Fixed "Label" placeholder bug on Windows MT5 clients
-* **Typography Standardization:** All dashboard fonts unified to Size 9 (Verdana) for pixel-perfect consistency
-
-### ✨ New Features
-
-* **Dashboard Toggle:** Added `ShowDashboard` input parameter to show/hide UI
-* **Improved Object Handling:** Refactored `CreateLabel` and `CreateRectLabel` to use "Check → Create → Update" pattern
-* **Enhanced Documentation:** Complete user manual, strategy guide, and market listing materials
-
-### 🐛 Bug Fixes
-
-* Fixed account number overflow on live accounts with long login IDs
-* Corrected `ANCHOR_BOTTOM` enum error (changed to `ANCHOR_LOWER`)
-* Resolved dashboard flickering on fast tick events
-
-### 🎨 UI Improvements
-
-* Equal vertical spacing (26px) across all dashboard elements
-* Consistent horizontal padding (12px)
-* Refined divider line positioning
-* Improved warning message alignment
-
 ---
-
-## v2.10 (2025-12-28) - Dashboard Overhaul
-
-### ✨ New Features
-
-* **AutoTheme System:** Dashboard automatically adapts to light/dark chart backgrounds
-* **Movable Dashboard:** Drag-and-drop functionality with persistent position storage
-* **Dynamic Title:** Dashboard header now uses `StrategyTag` input for branding
-* **Professional Header Bar:** Distinct header section with darker background
-
-### 🎨 UI Improvements
-
-* Removed RSI, Spread display, and action buttons for cleaner interface
-* Standardized fonts to Verdana (Bold for titles, Regular for data)
-* Increased font sizes for key metrics (Equity, Profit)
-* Added graphical divider (replaced text-based separator)
-* Improved color contrast and consistency
-
-### 🔧 Technical Changes
-
-* Dashboard objects now use global position variables (`g_dash_x`, `g_dash_y`)
-* Added `CHARTEVENT_OBJECT_DRAG` handling for smooth real-time movement
-* `UpdateDashboard()` called in `OnInit()` for immediate display
-* Account number formatting switched to `IntegerToString()` for stability
-
----
-
-## v2.00 (2025-12-15) - Professional Edition
-
-### ✨ New Features
-
-* **Complete Dashboard Redesign:** Modern financial monitoring interface
-* **Trailing Stop System:** Optional profit-locking mechanism with configurable parameters
-* **Range Trading Filters:** Restrict entries to specific price zones for Buy/Sell separately
-* **Equity Protection:** Automatic drawdown monitoring with emergency close option
-
-### 🔧 Parameter Changes
-
-* **Default Safety:** `CloseOnMaxDD`, `UseTrailing`, `UseTrendFilter` now default to `false`
-* **Dashboard Customization:** Added `DashCorner`, `DashX`, `DashY`, `DashWidth`, `DashHeight` inputs
-* **Theme Control:** New `DashColor` parameter for accent color customization
-
-### 🐛 Bug Fixes
-
-* Fixed initialization issues on live accounts
-* Improved symbol refresh logic
-* Enhanced error handling for invalid lot sequences
-
----
-
-## v1.50 (2025-11-20) - Stability Update
-
-### 🔧 Technical Improvements
-
-* Optimized position counting logic
-* Enhanced `IsMyPosition()` function for multi-EA compatibility
-* Improved cooldown timer accuracy
-* Better handling of manual trades when `IncludeManualTrade` is enabled
-
-### 🐛 Bug Fixes
-
-* Fixed rare case where grid would not deploy after basket close
-* Corrected MA buffer indexing issue
-* Resolved time filter edge case at midnight
-
----
-
-## v1.40 (2025-10-10) - Signal Mode Enhancement
-
-### ✨ New Features
-
-* **Dual Entry Modes:** `START_SIGNAL` vs `START_IMMEDIATE`
-* **Trend Filter Integration:** MA-based directional bias for RSI signals
-* **Adaptive RSI Thresholds:** Different levels for trend-following vs reversal
-
-### 🔧 Parameter Additions
-
-* `StartMode` enum (Signal/Immediate)
-* `UseTrendFilter` boolean
-* `MA_Period` for trend detection
-* Separate RSI levels: `RSI_Buy_Dip`, `RSI_Buy_Trend`, `RSI_Sell_Peak`, `RSI_Sell_Trend`
-
----
-
-## v1.30 (2025-09-01) - Risk Management Overhaul
-
-### ✨ New Features
-
-* **Maximum Drawdown Protection:** Configurable threshold with auto-close option
-* **Time-Based Filters:** Restrict trading to specific server hours
-* **Cooldown Periods:** Prevent overtrading after basket closures
-* **Stop Loss Option:** Individual SL for each position (optional)
-
-### 🔧 Parameter Additions
-
-* `MaxDDToHedge` (drawdown threshold)
-* `CloseOnMaxDD` (emergency close toggle)
-* `ApplyTimeFilter`, `StartTime`, `StopTime`
-* `CooldownSeconds`
-* `UseStopLoss`, `FixedStopLoss`
-
----
-
-## v1.20 (2025-07-15) - Grid Optimization
-
-### ✨ New Features
-
-* **Progressive Grid Spacing:** Distance increases after specified order count
-* **Customizable Lot Sequence:** CSV string input for flexible position sizing
-* **Dual TP Modes:** Basket average vs individual position targets
-
-### 🔧 Parameter Additions
-
-* `AddToDistance` (step increment)
-* `IncreaseDistAfter` (order threshold)
-* `LotSequence` (comma-separated string)
-* `TP_Type` enum (Average/Individual)
-
-### 🐛 Bug Fixes
-
-* Fixed lot parsing for sequences with spaces
-* Corrected average entry calculation for mixed lot sizes
-
----
-
-## v1.10 (2025-06-01) - Multi-Directional Support
-
-### ✨ New Features
-
-* **Directional Control:** Choose Buy-only, Sell-only, or Both
-* **Manual Trade Integration:** Optionally manage positions with Magic 0
-* **Enhanced Logging:** Detailed print statements for debugging
-
-### 🔧 Parameter Additions
-
-* `Trade_Direction` enum (Buy/Sell/Both)
-* `IncludeManualTrade` boolean
-* `StrategyTag` for comment customization
-
----
-
-## v1.00 (2025-05-01) - Initial Release
-
-### ✨ Core Features
-
-* **Grid Trading Engine:** Multi-level position deployment
-* **Basket Profit Management:** Close all positions when target reached
-* **RSI Integration:** Entry signal filtering
-* **Basic Dashboard:** Equity and position tracking
-* **Magic Number System:** Multi-EA compatibility
-
-### 📊 Initial Parameters
-
-* `MagicNumber`
-* `MaxOrders`
-* `GridDistance`
-* `TakeProfit`
-* `RSI_Period`
-
----
-
-## 🔮 Roadmap (Future Versions)
-
-### v2.30 (Planned - Q1 2026)
-
-* **Multi-Symbol Support:** Run on multiple pairs simultaneously
-* **News Filter Integration:** Auto-pause during high-impact events
-* **Advanced Analytics:** Export trade logs to CSV
-* **Mobile Notifications:** Push alerts for critical events
-
-### v3.00 (Planned - Q2 2026)
-
-* **Machine Learning Integration:** Adaptive grid spacing based on volatility
-* **Portfolio Mode:** Manage multiple sub-accounts from one EA
-* **Cloud Sync:** Backup settings and performance data
-* **Web Dashboard:** Monitor all instances from browser
-
----
-
-## 📝 Notes
-
-* All versions maintain backward compatibility with MT5 build 3000+
-* Recommended to test new versions on demo before live deployment
-* Contact support for migration assistance from older versions
-
-**Developed by Meet Shah** | FinTech Consultant | 10+ Years Market Experience
+**Developed by Meet Shah** | Institutional Trading Solutions | Version 2.22

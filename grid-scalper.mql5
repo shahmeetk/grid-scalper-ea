@@ -50,10 +50,11 @@ bool   CheckTradeAllowed();
 bool   ValidateEnvironment();
 double GetLotSize(int index);
 double NormalizeLot(double lot);
+bool   CheckLicense();
 
 //--- Input Parameters
-// input group "=== [0] License Check ==="
-// input string      LicenseKey                 = "";                   // Enter License Key Here
+input group "=== [0] License Check ==="
+input string      LicenseKey                 = "";                   // Enter License Key Here
 
 input group "=== [1] Identity & Risk ==="
 input string      StrategyTag                = "GoldScalper";        // Strategy Name (Comment Tag)
@@ -83,8 +84,13 @@ input bool        UseStopLoss                = false;                // Enable L
 input int         FixedStopLoss              = 5000;                 // Loss Limit (Points)
 
 input group "=== [4] Validation & Safety ==="
-input bool        UseAutoRisk                = true;                 // Auto-Scale Lots for Low Equity
+input bool        UseAutoRisk                = false;                 // Auto-Scale Lots for Low Equity
 input double      RiskPercent                = 0.5;                  // max risk per trade % of equity (conservative)
+input bool        UseMarginBuffer            = false;                 // Enable Free Margin Buffer Check
+input double      MarginBufferMultiplier     = 1.5;                  // Required Free Margin Multiplier (e.g. 1.5x)
+input bool        UseLowMarginStop           = false;                 // Enable Low Margin Level Stop
+input double      LowMarginLevelStop         = 500.0;                // Stop Trading if Margin Level < X%
+input bool        UseNettingThrottle         = false;                // Enable 2s/5s Throttling (Netting Safety)
 
 input group "=== [5] Entry Filters (Optional) ==="
 input int         CooldownSeconds            = 300;                  // Cooldown after Basket Close (Sec)
@@ -148,14 +154,12 @@ ulong          m_last_modify_tick = 0;  // Separate throttle for TP modification
 //+------------------------------------------------------------------+
 int OnInit()
 {
-   /*
    // 0. Check License
    if(!CheckLicense()) {
       Alert("⛔ LICENSE ERROR: Invalid Key for Account ", m_account.Login());
       Print("To Get a License, Contact Support.");
       return(INIT_FAILED);
    }
-   */
 
    // 1. Initialize Symbol
    if(!m_symbol.Name(Symbol())) {
@@ -279,8 +283,8 @@ void ManageDirection(ENUM_POSITION_TYPE type)
    if(count == 0 || ((type == POSITION_TYPE_BUY ? m_buy_count : m_sell_count) == 0)) {
       // Logic for FIRST entry
       if(!m_dd_breached && IsTradingTime()) {
-         // MANDATORY MILLISECOND THROTTLE (2000ms)
-         if(GetTickCount64() - m_last_request_tick < 2000) return;
+         // MANDATORY MILLISECOND THROTTLE (2000ms) - Optional now
+         if(UseNettingThrottle && GetTickCount64() - m_last_request_tick < 2000) return;
          
          // Cooldown Check
          if(TimeCurrent() - m_last_close_time < CooldownSeconds) return;
@@ -307,8 +311,8 @@ void ManageDirection(ENUM_POSITION_TYPE type)
    else {
       // Logic for GRID expansion
       if(!m_dd_breached) {
-         // MANDATORY MILLISECOND THROTTLE (2000ms)
-         if(GetTickCount64() - m_last_request_tick < 2000) return;
+         // MANDATORY MILLISECOND THROTTLE (2000ms) - Optional now
+         if(UseNettingThrottle && GetTickCount64() - m_last_request_tick < 2000) return;
 
          int current = (type == POSITION_TYPE_BUY) ? m_buy_count : m_sell_count;
          if(current < MaxOrders) CheckGridExpansion(type, current);
@@ -378,7 +382,7 @@ void OpenFirstTrade(ENUM_POSITION_TYPE type)
     if(!IsNewOrderAllowed()) return; 
     
     // Strict block to prevent any form of recursion
-    if(GetTickCount64() - m_last_request_tick < 2000) return;
+    if(UseNettingThrottle && GetTickCount64() - m_last_request_tick < 2000) return;
 
    
    double lot = NormalizeLot(GetLotSize(0));
@@ -462,7 +466,7 @@ void CheckGridExpansion(ENUM_POSITION_TYPE type, int current_count)
       
       if(!IsWithinRange(type, price)) return;
       if(!CheckTradeAllowed()) return;
-      if(GetTickCount64() - m_last_request_tick < 2000) return;
+      if(UseNettingThrottle && GetTickCount64() - m_last_request_tick < 2000) return;
       
       m_last_request_tick = GetTickCount64(); // Lock immediately
 
@@ -541,7 +545,7 @@ void UpdateAverageTP(ENUM_POSITION_TYPE type)
    if(sum_vol == 0) return;
    
    // 0. Throttle modifications to prevent log spam (5 seconds)
-   if(GetTickCount64() - m_last_modify_tick < 5000) return;
+   if(UseNettingThrottle && GetTickCount64() - m_last_modify_tick < 5000) return;
     
    double avg_price = sum_prod / sum_vol;
    double new_tp = 0;
@@ -656,9 +660,8 @@ void ApplyTrail(ENUM_POSITION_TYPE type, ulong last_ticket)
 
 
 //+------------------------------------------------------------------+
-//| License Check (Commented Out for Market)                         |
+//| License Check                                                    |
 //+------------------------------------------------------------------+
-/*
 bool CheckLicense() {
    // Allow in Strategy Tester
    if(MQLInfoInteger(MQL_TESTER)) return true;
@@ -668,17 +671,15 @@ bool CheckLicense() {
    
    // 1. Check for Demo Key (Universal)
    if(AccountInfoInteger(ACCOUNT_TRADE_MODE) == ACCOUNT_TRADE_MODE_DEMO) {
-      // if(LicenseKey == "GSP-DEMO") return true; 
-      return true; // Simplified for now since param is hidden
+      if(LicenseKey == "GSP-DEMO") return true; 
    }
    
-   // 2. Check for Real Account Key "GSP-Account"
-   // string expected_key = "GSP-" + IntegerToString(acc);
-   // if(LicenseKey == expected_key) return true;
+   // 2. Check for Real Account Key "GSP-" + AccountID
+   string expected_key = "GSP-" + IntegerToString(acc);
+   if(LicenseKey == expected_key) return true;
    
    return false;
 }
-*/
 
 //+------------------------------------------------------------------+
 //| Safety Check & Helpers |
@@ -767,24 +768,22 @@ bool CheckMoneyForTrade(double lot, ENUM_POSITION_TYPE type)
    
    if(!OrderCalcMargin(order_type, _Symbol, lot, m_symbol.Ask(), margin)) return false;
    
-   static datetime last_money_print = 0;
+   if(!OrderCalcMargin(order_type, _Symbol, lot, m_symbol.Ask(), margin)) return false;
    
-   // Validation Safety: Require 300% of margin (3x buffer) to prevent immediate StopOut
-   if(margin * 3.0 > m_account.FreeMargin()) {
-      if(TimeCurrent() - last_money_print > 3600) {
-         PrintFormat("MARGIN SAFETY: Lot %.2f requires %.2f margin (Safety 3.0x Required), Free: %.2f", lot, margin, m_account.FreeMargin());
-         last_money_print = TimeCurrent();
+   // Validation Safety: Require Margin Buffer
+   if(UseMarginBuffer) {
+      if(margin * MarginBufferMultiplier > m_account.FreeMargin()) {
+         PrintFormat("MARGIN SAFETY: Lot %.2f requires %.2f margin (Safety %.1fx Required), Free: %.2f", lot, margin, MarginBufferMultiplier, m_account.FreeMargin());
+         return false;
       }
-      return false;
    }
    
-   // Margin Level Safety (Avoid Opening if Margin Level < 2000%)
-   if(m_account.MarginLevel() > 0 && m_account.MarginLevel() < 2000.0) {
-       if(TimeCurrent() - last_money_print > 3600) {
-          PrintFormat("CRITICAL: Margin Level Too Low (%.2f%% < 2000%%). Skipping Trade.", m_account.MarginLevel());
-          last_money_print = TimeCurrent();
-       }
-       return false;
+   // Margin Level Safety (Avoid Opening if Margin Level < StopLevel)
+   if(UseLowMarginStop) {
+      if(m_account.MarginLevel() > 0 && m_account.MarginLevel() < LowMarginLevelStop) {
+          PrintFormat("CRITICAL: Margin Level Too Low (%.2f%% < %.2f%%). Skipping Trade.", m_account.MarginLevel(), LowMarginLevelStop);
+          return false;
+      }
    }
    
    return true;
@@ -1052,14 +1051,26 @@ double GetLotSize(int index) {
        return m_symbol.LotsMin();
    }
 
-   // 2.2 Equity-to-Margin Hard Cap (Max 2% of equity in margin per trade)
+   // 2.2 Equity-to-Margin Hard Cap (Max RiskPercent of equity)
    // This automatically handles expensive symbols like XAUUSD, BTC, etc.
-   double max_margin_allowed = eq * 0.02; 
+   double max_margin_allowed = eq * (RiskPercent / 100.0); 
    double equity_cap_lot = max_margin_allowed / margin_1;
    
-   // 2.3 Predictive Margin Level Scaling (Ensure total level > 2000%)
+   // 2.3 Predictive Margin Level Scaling
+   double limit_margin_total = 0.0;
+   
+   if(UseLowMarginStop) {
+       // Ensure total level > LowMarginLevelStop
+       // Formula: Equity / (StopLevel / 100)
+       // Example: 500% -> 5.0. Equity / 5.0 = Margin required to stay above 500%
+       double divisor = LowMarginLevelStop / 100.0;
+       if(divisor <= 0) divisor = 1.0; 
+       limit_margin_total = eq / divisor; 
+   } else {
+       // If safety disabled, allow up to 100% margin level (Equity / 1.0)
+       limit_margin_total = eq;
+   }
    double cur_margin = m_account.Margin();
-   double limit_margin_total = eq / 20.0; // 2000% Level = Equity / 20
    double margin_room = limit_margin_total - cur_margin;
    
    double predictive_max_lot = (margin_room > 0) ? (margin_room / margin_1) : 0;
