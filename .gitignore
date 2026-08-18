@@ -1,0 +1,6 @@
+.DS_Store
+.env
+.env.*
+assistant.ini
+**/assistant.ini
+*.ex5
