@@ -1,4 +1,12 @@
-Trade_Direction=2
+; GridScalper — demo/live preset (gate ON)
+; Unique magic per account/machine. Demo proven: 999888 / GoldScalp
+; Original v2.20 Gold_Optimized.set was Trade_Direction=2 (SELL only).
+StrategyTag=GoldScalp
+MagicNumber=999888
+MaxDDToHedge=2000.0
+CloseOnMaxDD=true
+IncludeManualTrade=false
+Trade_Direction=0
 StartMode=1
 LotSequence=0.01,0.01,0.01,0.02,0.02,0.03,0.04,0.06,0.10
 MaxOrders=12
@@ -12,6 +20,8 @@ ProfitToStartTrail=30.0
 TrailStartPoints=500.0
 TrailStepPoints=100.0
 TrailOnlyLast=true
+UseStopLoss=false
+FixedStopLoss=5000
 CooldownSeconds=300
 ApplyTimeFilter=false
 UseTrendFilter=true
@@ -21,7 +31,10 @@ RSI_Buy_Dip=30.0
 RSI_Buy_Trend=45.0
 RSI_Sell_Peak=70.0
 RSI_Sell_Trend=55.0
-MaxDDToHedge=2000.0
-CloseOnMaxDD=true
-StrategyTag=GoldScalp
-MagicNumber=999888
+UseBuyRange=false
+UseSellRange=false
+ShowDashboard=true
+DashHeight=210
+UseLLMAdvisorGate=true
+LLM_StartPaused=false
+LLM_BriefingSeconds=30

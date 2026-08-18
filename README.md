@@ -1,115 +1,83 @@
-# Grid Scalper Pro - Strategy Guide
+# Grid Scalper v2.21 — LLM advisor gate
 
-This Expert Advisor (EA) is a professional Grid Scalping system designed for Gold (XAUUSD). It focuses on "Smart Entry" and "Dynamic Recovery" to consistently profit from market volatility.
+Grid Scalper still **executes every order**. Native MetaTrader 5 AI Assistant (**MQL5 Lite**) only **coaches**. A human applies a pause/direction **gate**. That architecture is intentional: no LLM, WebRequest, news, or HTTP in `OnTick`.
 
-## 🚀 Quick Start (Gold/XAUUSD)
+Demo first. Live trading uses the **same attach path** with a **unique magic per account/machine**.
 
-1. **Compile the Code**: Open in MetaEditor and press Compile (F7).
-2. **Load Preset**: Use `Gold_Optimized.set` in Strategy Tester.
-3. **Mode Recommendation**: Use `Immediate` mode for constant action, or `Signal` mode for surgical entries.
+## Realtime MetaTrader 5 (demo or live)
 
----
+1. **Terminal:** Windows 10/11 (Mac Wine guest must report Windows 10/11, not Server 2008 R2). Journal build **6060+** is required for native AI. On Mac, **About can show wrapper 5834** while the Journal shows **6118** — trust the Journal.
+2. Log in to **MQL5.community**. Compile `mql5/GridScalper.mq5` → Experts, `mql5/LLM_SetGate.mq5` → Scripts.
+3. Copy `agents/grid-scalper.md` to `MQL5/Profiles/Agents/`. **Do not overwrite** `metatrader-default.md`. Do not copy `assistant.ini` between machines.
+4. **Algo Trading ON** for the EA. AI **PermissionsTrade off or confirm** — the model must not self-trade.
+5. Attach `GridScalper` to the chart. Load `presets/Gold_Optimized.set` (demo Gold: magic **999888**, tag **GoldScalp**). HUD: `LLM: RUN BOTH`.
+6. Open **View → AI Assistant**, model **MQL5 Lite**. Paste the 5-line prompt (below). Human applies **GATE** via HUD **PAUSE/RESUME** or script `LLM_SetGate`.
+7. **Do not remove the EA to pause.** Pause only blocks new entries/adds. Average TP, trailing, and MaxDD still run. Pause does **not** flatten the basket.
 
-## 🔧 Parameters Explained
+Full handshake, truth table, and porting notes: [`docs/END-TO-END.md`](docs/END-TO-END.md).
 
-### [1] Identity & Risk
+### 5-line prompt
 
-| Parameter | Recommended/Example | Description |
-| :--- | :--- | :--- |
-| **StrategyTag** | "GoldScalper" | The prefix used in trade comments for easy identification. |
-| **MagicNumber** | 123456 | A unique ID for the bot to identify its own trades. |
-| **MaxDDToHedge** | 2000.0 | Maximum allowed floating loss ($) before protection kicks in. |
-| **CloseOnMaxDD** | true | If true, all trades close immediately when MaxDD is reached. |
-| **IncludeManualTrade** | false | If true, the EA will also manage trades opened manually (Magic Number 0). |
+```
+Look only at this chart and positions for magic 999888 / tag GoldScalp.
+Do not place or close trades. If you cannot access news, write UNKNOWN.
+Reply with exactly 5 lines:
+REGIME: trend-up | trend-down | range | news-risk
+ACTION: RUN_BOTH | BUY_ONLY | SELL_ONLY | PAUSE_NEW_ADDS
+RISK: GREEN | AMBER | RED
+WHY: one sentence
+GATE: PAUSE=<0|1> DIR=<0|1|2>
+```
 
-### [2] Grid Execution
+`PAUSE` 0=RUN 1=PAUSE new risk. `DIR` 0=BOTH 1=BUY 2=SELL.
 
-| Parameter | Recommended/Example | Description |
-| :--- | :--- | :--- |
-| **Trade_Direction** | Both / Buy / Sell | Controls which direction the bot is allowed to trade. |
-| **StartMode** | Immediate / Signal | `Immediate` starts a trade instantly; `Signal` waits for RSI/Trend. |
-| **LotSequence** | "0.01,0.01,0.02..." | Comma-separated list of lot sizes for each level of the grid. |
-| **MaxOrders** | 12 | The maximum number of grid levels allowed per direction. |
-| **GridDistance** | 400 | The base distance (in points) between grid orders (400 pts = $4.00 on Gold). |
-| **AddToDistance** | 200 | Points added to the distance after a certain number of orders. |
-| **IncreaseDistAfter** | 3 | The grid order number after which `AddToDistance` is applied. |
+## Layout
 
-### [3] Profit & Exit (Profit Target & Loss Limit)
+| Path | Role |
+|---|---|
+| `mql5/GridScalper.mq5` | v2.21 athlete: grid + gate + briefing + HUD |
+| `mql5/LLM_SetGate.mq5` | Human writes GVs + Common `gs_llm_gate.txt` + note |
+| `agents/grid-scalper.md` | Extra agent profile (keep `metatrader-default.md`) |
+| `presets/Gold_Optimized.set` | Demo live: gate ON, BOTH, magic 999888 |
+| `presets/Gold_Optimized_Tester.set` | Tester: gate OFF (proves the grid still trades) |
+| `presets/Gold_Optimized_Tester_Paused.set` | Tester: gate ON + `LLM_StartPaused` |
+| `docs/END-TO-END.md` | Runtime, gate table, realtime attach, porting |
+| `USER_MANUAL.md` / `STRATEGY_EXPLAINED.md` | Original v2.20 strategy guide |
 
-| Parameter | Recommended/Example | Description |
-| :--- | :--- | :--- |
-| **TP_Type** | Average / Individual | `Average` closes the whole basket; `Individual` closes trades one by one. |
-| **TakeProfit** | 1000 | **Profit Target** in points. |
-| **UseTrailing** | true | Enables the trailing stop logic for the whole basket. |
-| **ProfitToStartTrail** | 30.0 | Total basket profit ($) required to activate the Trailing Stop. |
-| **TrailStartPoints** | 500 | Distance from price to start the trail (Points). |
-| **TrailStepPoints** | 100 | The step size for the trailing stop (Points). |
-| **TrailOnlyLast** | true | If true, trailing is only applied to the very last trade in the basket. |
-| **UseStopLoss** | false | Enables a **Loss Limit** for every individual trade. |
-| **FixedStopLoss** | 5000 | The **Loss Limit** in points from the entry price. |
+v2.20 source lived in `grid-scalper.mql5`. This branch replaces it with `mql5/GridScalper.mq5`. The old Gold preset was **SELL-only** (`Trade_Direction=2`); the demo LLM preset is **BOTH**.
 
-### [4] Entry Filters
+## Gate
 
-| Parameter | Recommended/Example | Description |
-| :--- | :--- | :--- |
-| **CooldownSeconds** | 300 | Seconds to wait after a basket closes before starting a new one. |
-| **ApplyTimeFilter** | false | Enable/Disable trading only during specific hours. |
-| **StartTime** | "08:00" | The server time to start looking for trades. |
-| **StopTime** | "20:00" | The server time to stop looking for new trades. |
+| Variable | 0 | 1 | 2 |
+|---|---|---|---|
+| `GS_LLM_PAUSE` | RUN | PAUSE new entries/adds | — |
+| `GS_LLM_DIR` | BOTH | BUY only | SELL only |
 
-### [5] Trend & Signal Logic
+- Gate file (live **and** visual tester): Terminal **Common Files** `gs_llm_gate.txt`
+- Note file (optional string): Common Files `gs_llm_note.txt` (same Common flag as the gate)
+- Briefing (live): `MQL5/Files/gs_llm_briefing.txt`
+- Strategy Tester does **not** share live GlobalVariables. Visual tester: HUD or Common file. Non-visual: `LLM_StartPaused`.
 
-| Parameter | Recommended/Example | Description |
-| :--- | :--- | :--- |
-| **UseTrendFilter** | true | Uses an EMA to determine if the trend is Up or Down. |
-| **MA_Period** | 50 | The period of the Exponential Moving Average. |
-| **RSI_Period** | 14 | The period of the Relative Strength Index. |
-| **RSI_Buy_Dip** | 30.0 | Buy Signal: Price is extremely oversold against the trend. |
-| **RSI_Buy_Trend** | 45.0 | Buy Signal: Price is slightly oversold during an uptrend. |
-| **RSI_Sell_Peak** | 70.0 | Sell Signal: Price is extremely overbought against the trend. |
-| **RSI_Sell_Trend** | 55.0 | Sell Signal: Price is slightly overbought during a downtrend. |
+If two EAs share one terminal, **fork** GV and file names (`GS_LLM_*` / `gs_llm_*.txt`). This branch keeps `GS_LLM_*`.
 
-### [6] Range Trading Filters
+## What changed vs original v2.20
 
-| Parameter | Recommended/Example | Description |
-| :--- | :--- | :--- |
-| **UseBuyRange** | false | Enable/Disable the price "box" for the Buy direction. |
-| **BuyStartPrice** | 1900.0 | The price boundary where Buying/Gridding starts. |
-| **BuyStopPrice** | 2100.0 | The price boundary where Buying/Gridding stops. |
-| **UseSellRange** | false | Enable/Disable the price "box" for the Sell direction. |
-| **SellStartPrice** | 2100.0 | The price boundary where Selling/Gridding starts. |
-| **SellStopPrice** | 1900.0 | The price boundary where Selling/Gridding stops. |
+- Removed leftover license (`CheckLicense`, `LicenseKey`) and `#property strict`
+- Cooldown now arms when the **basket actually closes** (`OnTradeTransaction`), not only on MaxDD `CloseAll`
+- Every market order logs `ResultRetcode` / deal
+- LLM pause/direction gate, briefing writer, HUD PAUSE/RESUME
+- Docs for realtime MT5 + native AI Assistant
 
----
+Grid math, RSI/MA filters, lot sequence, average TP, trailing, and MaxDD are unchanged in intent.
 
-## 💎 Current Available Features
+## Install (Wine / Windows)
 
-* ✅ **Dual Directional Grids**: Trade Buy and Sell simultaneously (Hedged) or set a specific bias.
-* ✅ **Range Filtering**: Restrict trading to specific price zones to avoid "buying the top" or "selling the bottom".
-* ✅ **Profit/Loss Terminology**: Trades close with clear **"Profit"** or **"Loss"** comments in account history.
-* ✅ **On-Chart HUD**: Visual dashboard showing real-time **Active Profit**, trade counts, and volume.
-* ✅ **Dynamic Spacing**: Grid distances can widen automatically as the basket grows to survive big market runs.
-* ✅ **Trend-Aware RSI**: Different logic for opening trades in strong trends vs. ranging markets.
-* ✅ **Trailing Safety**: Lock in gains automatically once a basket reaches your profit threshold.
-* ✅ **Drawdown Protection**: Emergency "Fuse" that closes all positions if a set dollar loss is hit.
-* ✅ **Cooldown Timer**: Prevents the bot from jumping back into a volatile market too quickly after a win.
+See [`docs/TEST-PROTOCOL.md`](docs/TEST-PROTOCOL.md). Compile:
 
----
+```text
+metaeditor64.exe /compile:"MQL5\Experts\GridScalper.mq5" /log
+```
 
-## 📈 Understanding Trade Comments & HUD
+## Risk
 
-The EA labels trades clearly to help you track market progression:
-
-* **`GoldScalp BUY #1 (0.01)`**: Initial trade with lot size.
-* **`GoldScalp BUY #2 (0.02)`**: Averaging-down trade.
-* **`Journal Logs`**: Check the 'Journal' tab for "Profit Target UPDATED" messages.
-* **`On-Chart HUD`**: The top-left corner shows your active basket **Profit**, total lots, and order counts.
-
----
-
-## ⚠️ Risk Warning
-
-Grid trading involves risk. While this EA has safety features (`MaxDDToHedge`), always test on Demo first.
-
-* **Recommended Balance**: $5,000+ for 0.01 lots on Gold.
-* **Leverage**: 1:500 recommended.
+Grid trading can lose the account. `MaxDDToHedge` is a fuse, not a guarantee. Test on demo. Unique magic per machine/account. Do not commit `assistant.ini`, `.env`, or API keys.

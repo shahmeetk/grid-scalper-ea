@@ -1,5 +1,7 @@
 # The "Grid Scalper" Strategy: A Beginner's Guide
 
+v2.21 adds a **pause/direction coach gate** (native MT5 AI Assistant). The grid math below is unchanged. Handshake and realtime attach: [`docs/END-TO-END.md`](docs/END-TO-END.md).
+
 Imagine this trading robot as a **disciplined team of workers** managing a fruit stand. Their goal is to buy fruit (Gold/XAUUSD) when it's cheap and sell it when the price bumps up slightly, or sell expensive fruit and buy it back cheaper.
 
 But markets result in "bad deals" sometimes. This robot is special because it doesn't panic when it's losing. Instead, it uses a technique called **"Averaging Down" (The Grid)** to fix bad trades.

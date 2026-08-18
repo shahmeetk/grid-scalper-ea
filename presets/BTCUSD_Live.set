@@ -1,0 +1,27 @@
+; Live weekend crypto — BTCUSD (adjust GridDistance if your broker point size differs)
+StrategyTag=BtcScalp
+MagicNumber=999888
+MaxDDToHedge=1500.0
+CloseOnMaxDD=true
+IncludeManualTrade=false
+Trade_Direction=0
+StartMode=1
+LotSequence=0.01,0.01,0.02,0.03,0.05
+MaxOrders=6
+GridDistance=50000.0
+AddToDistance=20000.0
+IncreaseDistAfter=3
+TP_Type=0
+TakeProfit=80000.0
+UseTrailing=false
+UseStopLoss=false
+CooldownSeconds=120
+ApplyTimeFilter=false
+UseTrendFilter=true
+MA_Period=50
+RSI_Period=14
+ShowDashboard=true
+DashHeight=210
+UseLLMAdvisorGate=true
+LLM_StartPaused=false
+LLM_BriefingSeconds=15
