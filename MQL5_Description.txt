@@ -1,160 +1,34 @@
-⚡ GRID SCALPER PRO PLUS v2.2
-Institutional Scaling Engine 
-
-Turn your MetaTrader 5 into a 24/7 Wealth Machine.
-Engineered for Stability. Validated for Security. Built for Profit.
-
-Most Grid EAs are dangerous. They keep buying until your account hits Margin Call. [b]We fixed that.[/b]
-
-✅ Universal Dynamic Risk Guard (UDRG)
-Mathematical protection that physically blocks trades if your margin gets too tight. 
-
-✅ Netting Account Native
-The only EA optimized for MT5 Netting accounts with millisecond-precision threading. Zero lag, zero "Invalid Volume" errors.
-
-✅ Neuromorphic Entry
-RSI + Trend Hybrid logic ensures we only enter when the market is exhausted. No indiscriminate buying.
-
-▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
-
-
-1️⃣ STRATEGY A: "GOLD RUSH" (XAUUSD)
-Aggressive Mean Reversion
-Captures small, frequent profits from Gold's volatility
-Timeframe: M1 / M5
-Target: Daily Compounding
-Risk: Managed by UDRG
-
-2️⃣ STRATEGY B: "FOREX FORTRESS" (EURUSD)
-Analytic Trend Scalping
-Surgical entries aligned with the H1 Trend.
-Timeframe: M15
-Target: Steady, Low-Drawdown Growth
-Risk:Conservative
-
-
-• Platform: MetaTrader 5 (MT5)
-• Pairs: XAUUSD, EURUSD, GBPUSD, USDJPY
-• Timeframes: M1 & M5 (Gold), M15 (Forex)
-• Min Deposit: $500 (Aggressive) / $1,000 (Safe)
-• Account Type: ECN, Raw, or Standard
-
-🚀 START AUTOMATING TODAY
-Don't leave your financial future to chance. Use the algorithm engineered for math-based returns.
-
-Risk Disclaimer: Trading involves significant risk. Past performance guarantees nothing. Use the provided UDRG settings for safety.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+GRID SCALPER PRO — v2.31
+Immediate Grid Engine for MetaTrader 5
+
+A practical grid / mean-reversion EA with explicit risk gates — not an “set and forget forever” black box. Built for XAUUSD and major FX pairs on M1–M15.
+
+WHAT IT DOES
+• Opens the first market entry when the side is flat (and filters allow), then adds grid steps at GridDistance (with optional step widening).
+• Exit modes: TP_Average (basket TP from volume-weighted average) or TP_Individual (per-position TP from its own entry, optional FixedStopLoss).
+• Optional buy/sell price ranges, server-time window, cooldown after entries and closes, MaxDD equity protection (block or close-all).
+
+DUPLICATE & NETTING GUARDS (v2.30–2.31)
+• Single in-flight order lock — confirmed by deal / volume, reconciled on timeout (no aggressive re-fire).
+• Same-level block: refuses a new entry within GridDistance × EntryGap of the last fill or any open algo price. Critical on netting / equity accounts where a second order at the same level merges and doubles volume.
+• Startup recovery from open positions (and netting depth from volume vs LotSequence) so MaxOrders still applies after restart — no “invisible” first re-entry when a side is already live.
+
+SAFETY INPUTS (each switchable)
+• MaxDDToHedge / CloseOnMaxDD — dollar drawdown arm; block new entries or close managed positions.
+• UseAutoRisk, margin buffer, low margin-level stop.
+• UseCooldown + CooldownSeconds after every entry and close.
+• Hard skip when symbol spread > 500 points (built-in).
+
+DASHBOARD
+Draggable HUD: equity, drawdown, net profit, buy/sell counts and volume. Optional auto light/dark theme.
+
+STARTING POINT
+• Gold (XAUUSD): M1/M5 — use the Gold_Optimized.set template (GridDistance 400, EntryGap 1.0, Cooldown on, Average TP) and validate on demo for your broker’s points and margin.
+• Forex: wider GridDistance, lower MaxOrders, session time filter as needed.
+
+• Platform: MetaTrader 5
+• Pairs: XAUUSD and majors (broker-dependent)
+• Timeframes: M1 / M5 (gold), M15 optional (FX)
+• Account: hedging or netting (netting needs EntryGap 1.0 + cooldown)
+
+Risk disclaimer: Trading involves significant risk of loss. Templates and past results are not guarantees. Demo-test thoroughly before live.

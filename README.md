@@ -1,506 +1,169 @@
-# 📘 Grid Scalper Pro - User Manual
+# Grid Scalper Pro — User Manual
 
 [![MQL5 Live Link](https://img.shields.io/badge/MQL5-Market_Live-blue)](https://www.mql5.com/en/market/product/160364?source=Site+Market+Product+Page)
 
-**Version 2.21 - Production Ready (MQL5 Validated)**
+**Version 2.31**
 
-## 1. Installation Guide
+Immediate grid entries with basket or per-position exits, range filters, cooldown, and same-level duplicate guards (netting + hedging).
 
-1. **Purchase/Download**: Acquire the EA directly from the **MQL5 Market**.
-2. **Open MT5**: Launch your MetaTrader 5 terminal.
-3. **Locate EA**: In the **Navigator** panel (Ctrl+N), go to `Market` -> `Experts`. You will find `Grid Scalper Pro` there.
-4. **Attach**: Drag and drop the EA onto your desired chart (e.g., XAUUSD M1 or M5).
+## What’s new / current behaviour (v2.30–2.31)
 
----
+- **Netting / equity duplicate prevention** — in-flight lock from send until deal or volume confirm; same-level block vs last fill **and** every open algo price (`GridDistance × EntryGap`). Prevents silent volume doubling when a second market order merges into one position.
+- **Cooldown on entries and closes** — `UseCooldown` / `CooldownSeconds` pause after successful entry, deal confirm, and when managed position count or volume drops (so `OnTick` cannot race a fresh entry after a basket close).
+- **Startup recovery** — `RecoverFromOpenPositions` syncs buy/sell counts and last prices from live tickets; on netting, grid depth is estimated from volume vs `LotSequence` so `MaxOrders` still applies after restart.
+- **No fresh first entry while a side is already live** — if that side already has an algo position, the EA manages/expands the grid instead of treating the chart as empty. First-entry path also refuses when an algo ticket of that side sits inside the (enabled) price range.
+- **TP_Average vs TP_Individual** — Average: market orders without TP, basket TP updated from VWAP. Individual: each order gets its own TP (and optional SL) from its entry.
 
-## 2. 🔑 Activation
+## Installation
 
-This Expert Advisor is protected by the **MQL5 Market Activation** system.
+1. Purchase/download from the **MQL5 Market**.
+2. In MT5 Navigator → `Market` → `Experts`, attach to the chart (e.g. XAUUSD M1/M5).
 
-* No manual license keys are needed.
-* Simply purchase/rent from the Market, and it will automatically activate for your terminal.
-* It can be used on any account (Demo or Real) logged into that terminal, subject to MQL5 Market rules.
+## Activation
 
----
+Protected by **MQL5 Market Activation**. No manual license key. Use on any demo/real account logged into that terminal, subject to Market rules.
 
-## 3. Using the Pro Dashboard
+## Dashboard
 
-The dashboard is designed for professional financial monitoring:
+- Drag the background to reposition (`ShowDashboard` to hide).
+- Shows equity, drawdown, net profit, and buy/sell counts & volume.
+- Auto light/dark theme via `AutoTheme`.
 
-* **🖱️ Movable**: **Double-click** the background to select it, then **drag** it to any position on your chart.
-* **🎛️ Visibility**: You can show/hide the dashboard via the `ShowDashboard` input parameter.
-* **📊 Live Stats**:
-  * **Equity Tracking**: Monitor your equity vs balance.
-  * **Net Profit**: Real-time floating P/L calculation.
-  * **Drawdown %**: See exactly how much your account is at risk.
-  * **Buy/Sell Volume**: Track total exposure for each direction.
+## Recommended starting point (Gold / XAUUSD)
 
-> **Note**: The dashboard adapts to your chart theme (Light/Dark) automatically!
+Aligned with `Gold_Optimized.set` — always validate on demo for your broker.
 
----
-
-## 4. Recommended Settings (Gold/XAUUSD)
-
-| Parameter | Value | Notes |
+| Parameter | Example | Notes |
 | :--- | :--- | :--- |
-| **Timeframe** | **M1 or M5** | Shorter timeframes work best for scalping. |
-| **Balance** | **$3,000+** | Recommended minimum for 0.01 lots. |
-| **GridDistance** | **400** | Distance between orders (400 points = $4.00 price move). |
-| **TakeProfit** | **1000** | Profit Target (1000 points = $10.00 price move). |
+| Timeframe | M1 or M5 | Scalping timeframe |
+| StrategyTag | `GoldScalp` | Order comment prefix |
+| MagicNumber | `999888` | Unique per chart/symbol |
+| Trade_Direction | Both (`2`) | Or Buy/Sell only if biased |
+| LotSequence | `0.01,0.01,0.01,0.02,0.02,0.03,0.04,0.06,0.10` | Covers early steps; extend if MaxOrders is high |
+| MaxOrders | `12` | Aggressive; lower on small / netting accounts |
+| GridDistance | `400` | Points between grid steps |
+| EntryGap | `1.0` | Full step — blocks same-level re-entry |
+| AddToDistance / IncreaseDistAfter | `200` / `3` | Wider spacing after order #3 |
+| TP_Type | Average (`0`) | Basket VWAP exit |
+| TakeProfit | `1000` | Points (basket or individual, per TP_Type) |
+| UseStopLoss | `false` | Optional per-ticket SL |
+| UseCooldown | `true` | Pause after every entry and close |
+| CooldownSeconds | `300` | Seconds |
+| MaxDDToHedge | `2000` | Equity DD trigger ($) |
+| CloseOnMaxDD | `true` | Close all when MaxDD hit |
+| Ranges / time filter | off | Enable when you have a zone or session |
 
----
+### Netting / equity brokers (important)
 
-## 5. Troubleshooting
+On **netting** accounts a second market order at the same level **merges** into one position and **silently doubles volume**. This build guards that by:
 
-* **"Autotrading Disabled"**: Make sure the "Algo Trading" button in the top toolbar is Green (ON).
-* **No Trades Opening**:
-    1. Check `StartMode`. If `Signal`, it may be waiting for RSI/Trend conditions.
-    2. Check `Times`. Is the market open?
-    3. Check `Spread`. Some brokers have high spreads that prevent scalping.
+- Holding an **in-flight** lock from send until deal/volume confirm (timeout reconciles; does not re-fire aggressively).
+- Refusing a new first or grid entry when price is within `GridDistance × EntryGap` of the last fill **or** any open algo position price (`EntryGap` is clamped to `0…1` in code; `1.0` = full step).
+- Syncing existing positions at EA start (`RecoverFromOpenPositions`) so pre-start trades are not invisible.
+- Estimating netting grid depth from position volume vs `LotSequence` so `MaxOrders` still means something after restart.
 
----
+Keep **`EntryGap=1.0`**, a sensible **`GridDistance`**, capped **`MaxOrders`**, and **`UseCooldown=true`** on equity/netting brokers. Do **not** run multiple EA instances with the same `MagicNumber` on the same symbol.
 
-# 🔧 Parameters Explained
+## Parameters
 
-Detailed breakdown of all configurable settings for **Grid Scalper Pro**.
+Every input below matches the EA (41 inputs in 7 groups). Prefer / example values are starting points for gold — tune on demo.
 
 ### [1] Identity & Risk
 
-| Parameter | Recommended/Example | Description |
+| Parameter | Preferred / example | Explanation |
 | :--- | :--- | :--- |
-| **StrategyTag** | `"GoldScalper"` | Prefix for trade comments. |
-| **MagicNumber** | `123456` | Unique bot identifier. |
-| **MaxDDToHedge** | `2000.0` | Max $ loss before safety. |
-| **CloseOnMaxDD** | `true` | Close all on MaxDD. |
-| **IncludeManualTrade**| `false` | Manage Magic 0 trades. |
+| **StrategyTag** | `GoldScalper` / `GoldScalp` | Prefix written into each order comment. Always set — helps filter deals in History. |
+| **MagicNumber** | `123456` or `999888` (preset) | Unique ID for this EA’s trades. Must be unique per chart/symbol if you run several EAs. |
+| **MaxDDToHedge** | `2000` | Equity drawdown in account currency (`Balance − Equity`) that arms protection. Scale with deposit. |
+| **CloseOnMaxDD** | `false` (default) / `true` in preset | If true, close all managed positions when MaxDD is hit; if false, only blocks new entries. Turn **on** for live capital protection. |
+| **IncludeManualTrade** | `false` | Also manage Magic `0` (manual) positions on this symbol. Turn **on** only if you want the EA to TP/close your manual tickets too. |
 
-### [2] Grid Execution
+### [2] Grid
 
-| Parameter | Recommended/Example | Description |
+| Parameter | Preferred / example | Explanation |
 | :--- | :--- | :--- |
-| **Trade_Direction** | `Both / Buy / Sell`| Allowed trading sides. |
-| **StartMode** | `Immediate / Signal` | Entry trigger type. |
-| **LotSequence** | `"0.01,0.01,0.02..."`| Custom lot scaling. |
-| **MaxOrders** | `12` | Max positions per side. |
-| **GridDistance** | `400` | Points between initial orders. |
-| **AddToDistance** | `200` | Dynamic spacing increase. |
+| **Trade_Direction** | Both / Buy only / Sell only | Allowed side. Use one-sided on strong trends or when hedging is restricted. |
+| **LotSequence** | `0.01,0.01,0.01,0.02,…` | Comma-separated lots per grid step (index 0 = first entry). Keep early lots small; length should cover `MaxOrders`. |
+| **MaxOrders** | `5` (default) / `12` (preset) | Max grid steps **per side**. Lower on netting/small accounts — each step adds risk (and volume on netting). |
+| **GridDistance** | `400`–`500` on XAUUSD | Base spacing between levels, in **points**. Wider = fewer adds. **Netting:** primary same-level shield with EntryGap. |
+| **EntryGap** | `1.0` | Fraction of `GridDistance` used as the same-level exclusion zone (`1.0` = full step; code caps above `1.0`). Keep at `1.0` on equity/netting. Use `0.7`–`0.9` only if you need slightly tighter packing and accept more fill risk. |
+| **AddToDistance** | `200` | Extra points added to spacing after `IncreaseDistAfter`. Softens deep-grid stacking. |
+| **IncreaseDistAfter** | `3` | Order count at which wider spacing starts. Raise if you want uniform spacing longer. |
 
-### [3] Profit & Exit
+### [3] Exit
 
-| Parameter | Recommended/Example | Description |
+| Parameter | Preferred / example | Explanation |
 | :--- | :--- | :--- |
-| **TakeProfit** | `1000` | Points profit target. |
-| **TP_Type** | `Average / Individual`| Exit logic type. |
-| **UseTrailing** | `false` | Enable trailing stop. |
-| **FixedStopLoss** | `5000` | Hard stop per position. |
+| **TP_Type** | Average (basket) / Individual (scalp) | **Average** = one basket TP from volume-weighted average; **Individual** = each position keeps its own TP from its entry. Switch deliberately — do not mix expectations mid-basket. |
+| **TakeProfit** | `1000` basket / `300`–`500` individual | Target distance in **points**. Larger on Average baskets; smaller on Individual. |
+| **UseStopLoss** | `false` for many gold grids | Attach a per-position stop on send. Turn **on** when you need a hard per-ticket risk cap. |
+| **FixedStopLoss** | `5000` | SL distance in points (only if UseStopLoss). Must clear broker stops/freeze level. |
 
-### [4] Validation & Safety (Guardrails)
+### [4] Safety
 
-| Parameter | Recommended/Example | Description |
+| Parameter | Preferred / example | Explanation |
 | :--- | :--- | :--- |
-| **UseAutoRisk** | `false` | Enable equity-based clamping. |
-| **RiskPercent** | `0.5` | Max Equity % per trade margin. |
-| **UseMarginBuffer** | `false` | Require 1.5x free margin. |
-| **UseLowMarginStop** | `true` | Stop grid if Margin Level low. |
-| **LowMarginLevelStop**| `500.0` | Margin Level % threshold. |
-| **UseNettingThrottle**| `true` | 2s delay for Netting accounts. |
+| **UseAutoRisk** | `false` with a fixed `LotSequence` | Clamp lots from equity × RiskPercent and margin room. Turn **on** for tiny accounts that must not send full sequence lots. |
+| **RiskPercent** | `0.5` | Max equity % used as margin budget per trade when AutoRisk is on. Keep low; this is a cap, not a target. |
+| **UseMarginBuffer** | `false` / `true` on tight accounts | Require free margin ≥ order margin × multiplier. Enable if you see “not enough money” mid-grid. |
+| **MarginBufferMultiplier** | `1.5` | Free-margin headroom factor. Higher = safer, fewer deep-grid adds. |
+| **UseLowMarginStop** | `false` / `true` live | Block new trades when margin level % is too low. Recommended live if the broker exposes margin level. |
+| **LowMarginLevelStop** | `500` | Margin level threshold (%). Broker-dependent. |
 
-### [5] Entry Filters
+### [5] Cooldown & Time
 
-| Parameter | Recommended/Example | Description |
+| Parameter | Preferred / example | Explanation |
 | :--- | :--- | :--- |
-| **CooldownSeconds**| `300` | Rest after basket close. |
-| **ApplyTimeFilter** | `true` | Use daily trading window. |
-| **RSI_Period** | `14` | RSI calculation period. |
-| **UseTrendFilter** | `true` | Filter with 50-period MA. |
+| **UseCooldown** | `true` | Enable pause after **entries and closes**. Leave **on** for live — critical on netting to stop tick races. |
+| **CooldownSeconds** | `300` (5 min) | Pause length after an entry or a position-count/volume drop. Shorter (60–120) on demo only; live gold often wants 180–300. |
+| **ApplyTimeFilter** | `false` unless you avoid roll/news | Restrict trading to a server-time window. |
+| **StartTime** | `08:00` | Window start `HH:MM` (server). |
+| **StopTime** | `20:00` | Window end `HH:MM` (server). Supports overnight windows when Start > Stop. |
 
-### [6] Theme & Licensing
+Cooldown is stamped when: an entry send succeeds, a deal confirms, **or** managed position count/volume drops.
 
-| Parameter | Recommended/Example | Description |
+### [6] Ranges
+
+| Parameter | Preferred / example | Explanation |
 | :--- | :--- | :--- |
-| **LicenseKey** | `"GSP-DEMO"` | Active License/Demo key. |
-| **ShowDashboard** | `true` | Display UI panel. |
-| **DashColor** | `clrGold` | Primary UI color. |
-
----
-
-## 🎯 Core Trading Philosophy
-
-Grid Scalper Pro is built on a **mean-reversion principle** combined with **trend-following adaptability**. The system assumes that markets oscillate within ranges, creating predictable profit opportunities when positions are layered at strategic intervals.
-
----
-
-## 📐 Mathematical Foundation
-
-### Grid Spacing Formula
-
-The distance between grid levels is calculated as:
-
-```
-Level_Distance(n) = Base_Distance + (Step_Increment × Multiplier(n))
-
-Where:
-- Base_Distance = GridDistance parameter (e.g., 400 points)
-- Step_Increment = AddToDistance parameter (e.g., 200 points)
-- Multiplier(n) = 0 if n <= IncreaseDistAfter, else (n - IncreaseDistAfter)
-```
-
-**Example:**
-
-* GridDistance = 400
-* AddToDistance = 200
-* IncreaseDistAfter = 3
-
-Grid levels:
-
-1. Level 1: 400 points from entry
-2. Level 2: 400 points from Level 1
-3. Level 3: 400 points from Level 2
-4. Level 4: 600 points from Level 3 (400 + 200)
-5. Level 5: 600 points from Level 4
-6. Level 6: 600 points from Level 5
-
-This **progressive spacing** prevents over-concentration of orders during strong trends.
-
----
-
-## 💰 Position Sizing Logic
-
-### Lot Sequence Array
-
-The EA uses a **predefined lot progression** rather than Martingale multiplication:
-
-```
-Default: "0.01,0.01,0.01,0.02,0.02,0.03,0.04,0.06,0.10,0.15,0.25"
-
-Position 1: 0.01 lots
-Position 2: 0.01 lots
-Position 3: 0.01 lots
-Position 4: 0.02 lots (2x)
-Position 5: 0.02 lots
-Position 6: 0.03 lots (3x)
-Position 7: 0.04 lots (4x)
-Position 8: 0.06 lots (6x)
-Position 9: 0.10 lots (10x)
-Position 10: 0.15 lots (15x)
-Position 11: 0.25 lots (25x)
-```
-
-**Why This Works:**
-
-* **Controlled Risk:** No exponential growth like Martingale
-* **Averaging Down:** Larger lots at deeper levels improve average entry
-* **Customizable:** Users can define their own risk appetite
-
-### Risk Calculation
-
-Maximum exposure at full grid (11 positions):
-
-```
-Total Lots = 0.01 + 0.01 + 0.01 + 0.02 + 0.02 + 0.03 + 0.04 + 0.06 + 0.10 + 0.15 + 0.25
-           = 0.70 lots
-
-For XAUUSD at $2,000/oz:
-- 1 lot = $100,000 notional
-- 0.70 lots = $70,000 notional
-- At 1:100 leverage = $700 margin required
-```
-
----
-
-## 🎲 Entry Logic
-
-### Mode 1: Immediate Start (START_IMMEDIATE)
-
-The EA opens the first position **immediately** when attached to the chart, then deploys subsequent grid levels as price moves against the initial direction.
-
-**Buy Grid Example:**
-
-1. Market price: $2,000
-2. Open 0.01 Buy at $2,000
-3. If price drops to $1,996 (400 points), open 0.01 Buy
-4. If price drops to $1,992, open 0.01 Buy
-5. Continue until MaxOrders reached
-
-### Mode 2: Signal-Based Start (START_SIGNAL)
-
-The EA waits for **RSI + MA confirmation** before opening the first position.
-
-**Buy Signal Conditions:**
-
-```
-IF UseTrendFilter == true:
-   MA_Trend = Current_Price > MA(50)
-   IF MA_Trend == Bullish:
-      Entry_Trigger = RSI < RSI_Buy_Trend (45)
-   ELSE:
-      Entry_Trigger = RSI < RSI_Buy_Dip (30)
-ELSE:
-   Entry_Trigger = RSI < RSI_Buy_Dip (30)
-```
-
-**Sell Signal Conditions:**
-
-```
-IF UseTrendFilter == true:
-   MA_Trend = Current_Price < MA(50)
-   IF MA_Trend == Bearish:
-      Entry_Trigger = RSI > RSI_Sell_Trend (55)
-   ELSE:
-      Entry_Trigger = RSI > RSI_Sell_Peak (70)
-ELSE:
-   Entry_Trigger = RSI > RSI_Sell_Peak (70)
-```
-
----
-
-## 🎯 Exit Logic
-
-### Basket Take Profit (TP_AVERAGE)
-
-The EA calculates the **weighted average entry price** of all open positions, then sets a basket TP:
-
-```
-Average_Entry = Σ(Entry_Price × Lot_Size) / Σ(Lot_Size)
-
-For Buy Grid:
-   TP_Price = Average_Entry + (TakeProfit / 10)
-
-For Sell Grid:
-   TP_Price = Average_Entry - (TakeProfit / 10)
-```
-
-**Example:**
-
-* Position 1: Buy 0.01 @ $2,000
-* Position 2: Buy 0.01 @ $1,996
-* Position 3: Buy 0.02 @ $1,992
-
-```
-Average = (2000×0.01 + 1996×0.01 + 1992×0.02) / (0.01 + 0.01 + 0.02)
-        = (20 + 19.96 + 39.84) / 0.04
-        = 79.80 / 0.04
-        = $1,995
-
-TP_Price = $1,995 + (1000 points / 10)
-         = $1,995 + $10
-         = $2,005
-```
-
-When market reaches $2,005, **all 3 positions close** with profit.
-
-### Individual Take Profit (TP_INDIVIDUAL)
-
-Each position has its own TP:
-
-```
-For Buy: TP = Entry_Price + (TakeProfit / 10)
-For Sell: TP = Entry_Price - (TakeProfit / 10)
-```
-
----
-
-## 🛡️ Risk Management Systems
-
-### 1. Maximum Drawdown Protection
-
-```
-Current_DD = Balance - Equity
-
-IF Current_DD > MaxDDToHedge:
-   Trigger_Warning_Dashboard()
-   IF CloseOnMaxDD == true:
-      Close_All_Positions()
-```
-
-**Example:**
-
-* Balance: $10,000
-* MaxDDToHedge: $2,000
-* If Equity drops to $7,999, protection activates
-
-### 2. Trailing Stop System
-
-```
-IF UseTrailing == true AND Basket_Profit > ProfitToStartTrail:
-   
-   IF TrailOnlyLast == true:
-      Apply_Trail_To_Last_Position()
-   ELSE:
-      Apply_Trail_To_All_Positions()
-   
-   Trail_Distance = TrailStartPoints
-   Trail_Step = TrailStepPoints
-```
-
-**Mechanism:**
-
-* Waits for basket profit to reach $30 (ProfitToStartTrail)
-* Activates trailing stop at 500 points (TrailStartPoints)
-* Adjusts in 100-point increments (TrailStepPoints)
-
-### 3. Time-Based Filters
-
-```
-IF ApplyTimeFilter == true:
-   Current_Server_Time = TimeCurrent()
-   
-   IF Current_Time < StartTime OR Current_Time > StopTime:
-      Skip_New_Entries()
-```
-
-Prevents trading during:
-
-* Low liquidity hours (Asian session for XAUUSD)
-* High-impact news events
-* Broker maintenance windows
-
-### 4. Range Filters
-
-```
-IF UseBuyRange == true:
-   Min_Price = Min(BuyStartPrice, BuyStopPrice)
-   Max_Price = Max(BuyStartPrice, BuyStopPrice)
-   
-   IF Current_Price < Min_Price OR Current_Price > Max_Price:
-      Block_Buy_Entries()
-```
-
-**Use Case:**
-
-* Restrict Gold buys to $1,900 - $2,100 range
-* Prevents entries during parabolic moves
-
----
-
-## 📊 Performance Metrics
-
-### Expected Returns (Based on 10-Year Track Record)
-
-**Conservative Settings:**
-
-* Monthly Return: 2-4%
-* Maximum Drawdown: 8-12%
-* Win Rate: 65-75%
-* Profit Factor: 1.5-2.0
-
-**Aggressive Settings:**
-
-* Monthly Return: 6-10%
-* Maximum Drawdown: 15-25%
-* Win Rate: 60-70%
-* Profit Factor: 1.3-1.8
-
-### Optimal Market Conditions
-
-**Best Performance:**
-
-* Ranging markets (70% of time)
-* Moderate volatility (ATR 14: 800-1,500 points for XAUUSD)
-* Low spread environments (<20 points)
-
-**Challenging Conditions:**
-
-* Strong trending markets (30% of time)
-* Flash crashes or parabolic rallies
-* High spread during news (>50 points)
-
----
-
-## 🔬 Backtesting Methodology
-
-### Data Requirements
-
-* **Minimum:** 1 year of tick data
-* **Recommended:** 3-5 years including crisis periods
-* **Quality:** 99% modeling quality in Strategy Tester
-
-### Optimization Parameters
-
-**Primary Variables:**
-
-1. GridDistance (300-600 points)
-2. TakeProfit (800-1,500 points)
-3. MaxOrders (8-15 positions)
-
-**Secondary Variables:**
-
-1. LotSequence ratios
-2. RSI thresholds (if using Signal mode)
-3. Time filters
-
-### Walk-Forward Analysis
-
-* **In-Sample:** 70% of data for optimization
-* **Out-of-Sample:** 30% for validation
-* **Rolling Window:** 6-month periods
-
----
-
-## 🎓 Advanced Concepts
-
-### Why Grid Trading Works
-
-1. **Mean Reversion:** Prices oscillate around fair value
-2. **Liquidity Provision:** You become the market maker
-3. **Probability Distribution:** Most moves are <500 points
-4. **Compounding:** Small wins accumulate over time
-
-### When Grid Trading Fails
-
-1. **Black Swan Events:** COVID-19 crash, Swiss Franc de-peg
-2. **Sustained Trends:** 2,000+ point moves without retracement
-3. **Broker Issues:** Slippage, requotes, stop-outs
-
-### Mitigation Strategies
-
-1. **Diversification:** Run on multiple uncorrelated pairs
-2. **Capital Allocation:** Never risk >30% on one EA
-3. **VPS Hosting:** Ensure 24/7 uptime
-4. **Broker Selection:** ECN/STP with tight spreads
-
----
-
-## 🚀 Real-World Application
-
-### Portfolio Integration
-
-**Scenario:** $50,000 PMS Account
-
-**Allocation:**
-
-* Grid Scalper Pro (XAUUSD): $15,000 (30%)
-* Grid Scalper Pro (XAGUSD): $10,000 (20%)
-* Grid Scalper Pro (EURUSD): $10,000 (20%)
-* Manual Discretionary: $10,000 (20%)
-* Cash Reserve: $5,000 (10%)
-
-**Expected Monthly Return:**
-
-* XAUUSD: $300-$600 (2-4%)
-* XAGUSD: $200-$400 (2-4%)
-* EURUSD: $200-$400 (2-4%)
-* **Total:** $700-$1,400 (1.4-2.8% of total capital)
-
----
-
-## 📚 Further Reading
-
-### Recommended Resources
-
-1. **"Trading Systems" by Urban Jaekle** - Grid strategy analysis
-2. **"Algorithmic Trading" by Ernest Chan** - Backtesting methodology
-3. **MQL5 Documentation** - Technical implementation
-
-### Community Support
-
-* MQL5 Forum: Grid Trading section
-* TradingView: XAUUSD scalping ideas
-* Meet Shah's PMS Network: Institutional insights
-
----
-
-**This strategy has been refined over 10+ years managing real capital. It's not a "get rich quick" scheme—it's a professional tool for consistent, risk-managed returns.**
-
----
-**Developed by Meet Shah** | Institutional Trading Solutions | Version 2.22
+| **UseBuyRange** | `false` until you have a zone | Only allow buys inside the buy band. |
+| **BuyStartPrice** / **BuyStopPrice** | e.g. `1900`–`2100` | Lower/upper bounds for buys (order does not matter). |
+| **UseSellRange** | `false` by default | Same for sells. |
+| **SellStartPrice** / **SellStopPrice** | e.g. `2100`–`1900` | Bounds for sells. |
+
+**First entry / restart:** with open algo positions, the EA recovers grid state and expands/manages — it does not open a brand-new first entry as if the book were empty. The first-entry path also skips if an algo position of that side is already inside the enabled range (`IsWithinRange` passes through when the range filter is off).
+
+### [7] Dashboard
+
+| Parameter | Preferred / example | Explanation |
+| :--- | :--- | :--- |
+| **DashCorner** | Left upper | Chart corner for the HUD. |
+| **DashX** / **DashY** | `10` / `20` | Pixel offsets. Drag the panel live; these are defaults. |
+| **DashWidth** / **DashHeight** | `220` / `180` | Panel size. Increase if text clips. |
+| **DashColor** | Goldenrod | Accent colour. |
+| **AutoTheme** | `true` | Pick light/dark text from chart background. |
+| **ShowDashboard** | `true` | Show or hide HUD. Off for clean charts / VPS screenshots. |
+
+## Behaviour notes
+
+- **Same-level duplicates:** in-flight lock + proximity to last fill and every open algo price (`GridDistance × EntryGap`). On netting, volume increase also confirms a fill.
+- **Cooldown:** `UseCooldown` toggle; stamped on entry success and on position-count **or** volume drop.
+- **TP_Average:** market orders without TP; basket TP updated from VWAP.
+- **TP_Individual:** TP (and optional SL) set on each order from its own entry.
+- **Hard spread skip:** ticks with symbol spread > 500 points are ignored (not a user input).
+
+## Troubleshooting
+
+| Symptom | What to check |
+| :--- | :--- |
+| No trades at all | AutoTrading ON; EA allowed to trade; Experts log for init errors. |
+| Still no entries | Cooldown active; outside time window; outside buy/sell range; MaxDD breached (`m_dd_breached`); in-flight lock; same-level gap (`EntryGap`); spread > 500. |
+| Duplicate / doubled volume (netting) | One EA instance per magic/symbol; keep `EntryGap=1.0` and cooldown on; wait a few seconds after sends for deal confirm. |
+| Re-enters after restart | Check Experts log for `Recovered grid state` — counts should match live volume; do not reset magic mid-basket. |
+| Basket never closes / weird TP | Confirm `TP_Type`: Average updates one basket TP from VWAP; Individual uses per-ticket TP from entry. |
+| Individual exits too tight/wide | Adjust `TakeProfit` in points for that mode — Average and Individual need different distances. |
+| Ranges “not working” | `UseBuyRange` / `UseSellRange` must be **true**; bounds use min/max of start/stop so order does not matter. |
+
+## Disclaimer
+
+Trading involves risk of loss. Past results and templates are not guarantees. Test on demo before live.
